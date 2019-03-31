@@ -1,17 +1,14 @@
-#module LavoisierCore
+module LavoisierCore
 
 
+include("core.jl")
+include("IAPWS95.jl")
+include("utils.jl")
 
-abstract type AbstractThermoModel end
+export IAPWS95
+export AbstractHelmholtzModel, pressure, core_helmholtz,diffdata,entropy
 
-abstract type AbstractAlphaT end
-abstract type AbstractMixtureRule end
-struct alphaTSoave <: AbstractAlphaT end
-struct alphaTRK <: AbstractAlphaT end
-struct alphaTVdW <: AbstractAlphaT end
-struct AbstractHelmholtzModel <: AbstractThermoModel end
-struct AbstractCubic <: AbstractThermoModel end
-
+end
 
 
 
