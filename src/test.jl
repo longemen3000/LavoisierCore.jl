@@ -25,4 +25,5 @@ println(pressure(m,weight_to_molar(1/322,[m.molecularWeight],[1.0]),647,[1.0]))
 hx = 1000*weight_to_molar(0.749161585e3  ,[m.molecularWeight],[1.0])
 sx = 1000*weight_to_molar(0.210865845e1 ,[m.molecularWeight],[1.0])
 
+testh() = @btime pressure(m,322.0u"kg/m^3",647.0u"K",[1.0])
 

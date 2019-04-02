@@ -3,7 +3,7 @@ module LavoisierCore
 
 include("core.jl")
 include("IAPWS95.jl")
-include("utils.jl")
+
 
 export IAPWS95
 export AbstractHelmholtzModel,diffdata , entropy, enthalpy
