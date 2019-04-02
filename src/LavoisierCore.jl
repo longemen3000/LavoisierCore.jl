@@ -10,7 +10,7 @@ export AbstractHelmholtzModel,,diffdata,entropy, enthalpy
 export normalizefrac,normalizefrac!,reducedvolume,reducedtemperature,ischemicaldata,property,compound
 export molar_to_weight,weight_to_molar
 
-
+end
 
 
 #end
