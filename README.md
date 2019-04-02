@@ -1,4 +1,4 @@
-# LavoisierCore
+# LavoisierCore.jl
 Abstract Definitions and Functions to establish a thermodynamic library in julia
 
 ## What?
