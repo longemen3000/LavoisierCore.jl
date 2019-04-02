@@ -61,7 +61,9 @@ only gradients (order == 1) and hessians (order == 2) are implemented.
     return ResultDataHelmHoltz(d,f(d),DiffResults.gradient(res),DiffResults.hessian(res))
 end
 
-
+#
+#Pressure
+#
 function _pressure(model::M,v,T,x::Array{R,1}) where M <: AbstractHelmholtzModel where R<:Real
     return -_gradient(model,v,T,x)[1]
 return 
@@ -78,18 +80,27 @@ function pressure(model::M,v,T,x::Array{R,1}) where M <: AbstractHelmholtzModel 
 return 
 end
 
+
+#
+#Entropy
+#
+
 function _entropy(model::M,V,T,x::Array{R,1}) where M <: AbstractHelmholtzModel where R<:Real
     return -_gradient(model,V,T,x)[2]
 end
-
-function entropy(model::M,V,T,x::Array{R,1}) where M <: AbstractHelmholtzModel where R<:Real
-    return _entropy(model,V,T,x)*1.0u"J/mol"
-end
-
 function _entropy(diffdata::ResultDataHelmHoltz)
     return -diffdata.dfdx[2]
 end
+function entropy(model::M,v,T,x::Array{R,1}) where M <: AbstractHelmholtzModel where R<:Real
+    (v2,T2) = _transformVT(v,T,[model.molecularWeight],x)
+    return _entropy(model,v2,T2,x)*1.0u"J/mol"
+end
 
+
+
+#
+#enthalpy
+#
 function _enthalpy(model::M,v,T,x::Array{R,1}) where M <: AbstractHelmholtzModel where R<:Real
     df = _gradient(m,v,T,x)
     return core_helmholtz(m,v,T,x)-df[2]*T-v*df[1]
@@ -99,17 +110,27 @@ function _enthalpy(diffdata::ResultDataHelmHoltz)
     return diffdata.fx-diffdata.dfdx[2]*diffdata.x[2]-diffdata.dfdx[1]*diffdata.x[1]
 end
 
+function enthalpy(model::M,v,T,x::Array{R,1}) where M <: AbstractHelmholtzModel where R<:Real
+    (v2,T2) = _transformVT(v,T,[model.molecularWeight],x)
+    return _enthalpy(model,v2,T2,x)*1.0u"J/mol"
+end
 
+#
+#Internal Energy
+#
 function _internal_energy(model::M,v,T,x::Array{R,1}) where M <: AbstractHelmholtzModel where R<:Real
     return core_helmholtz(m,v,T,x)-_gradient(m,v,T,x)[2]*T
 end
 
 
 function _internal_energy(diffdata::ResultDataHelmHoltz)
-    return diffdata.fx-diffdata.x[2]*diffdata.dfdx[2]
-return 
+    return diffdata.fx-diffdata.x[2]*diffdata.dfdx[2] 
 end
 
+function internal_energy(model::M,v,T,x::Array{R,1}) where M <: AbstractHelmholtzModel where R<:Real
+    (v2,T2) = _transformVT(v,T,[model.molecularWeight],x)
+    return _internal_energy(model,v2,T2,x)*1.0u"J/mol"
+end
 
 
 
