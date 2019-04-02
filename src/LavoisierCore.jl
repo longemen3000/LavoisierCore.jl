@@ -6,7 +6,7 @@ include("IAPWS95.jl")
 include("utils.jl")
 
 export IAPWS95
-export AbstractHelmholtzModel,,diffdata,entropy, enthalpy
+export AbstractHelmholtzModel,diffdata , entropy, enthalpy
 export normalizefrac,normalizefrac!,reducedvolume,reducedtemperature,ischemicaldata,property,compound
 export molar_to_weight,weight_to_molar
 
