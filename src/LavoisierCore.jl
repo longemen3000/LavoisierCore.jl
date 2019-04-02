@@ -6,11 +6,10 @@ include("IAPWS95.jl")
 include("utils.jl")
 
 export IAPWS95
-export AbstractHelmholtzModel, pressure, core_helmholtz,diffdata,entropy
-
+#export AbstractHelmholtzModel, core_pressure, core_helmholtz,diffdata,core_entropy
+#export normalizefrac,normalizefrac!,reducedvolume,reducedtemperature,ischemicaldata,property,compound
+export core_pressure
 end
-
-
 
 
 

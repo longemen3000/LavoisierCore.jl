@@ -1,5 +1,4 @@
-using LinearAlgebra, JuliaDB
-
+using LinearAlgebra, JuliaDB, Unitful
 
 
 """
@@ -23,29 +22,13 @@ function disallowmissing(x::Array{Union{Missing,T},N}) where T where N
     end
 end
 
-"""
-    molar_to_weight(value,x,MW)
-    transforms from 'x/mol' to 'x/kg', using the molar fraction 'x' 
-    and the molecular weight 'MW' 
-    # Examples
-    ```julia-repl
-    julia> molar_to_weight(55.01, [18.01,16.0] [0.5,0.5])
-    1
-""" 
-function molar_to_weight(value,x::Array{T,1},MW::Array{T,1}) where T <: Real
-    return value/LinearAlgebra.dot(MW,x)/1000
+
+function molar_to_weight(value,x,MW)
+    return value/LinearAlgebra.dot(MW,x)*1000.0
 end
-"""
-    weight_to_molar(value,x,MW)
-    transforms from 'x/kg' to 'x/mol', using the molar fraction 'x' 
-    and the molecular weight 'MW' 
-    # Examples
-    ```julia-repl
-    julia> molar_to_weight(55.01, [18.01,16.0] [0.5,0.5])
-    1
-"""
-function weight_to_molar(value::T,x::Array{T,1},MW::Array{T,1}) where T <: Real
-    return value*LinearAlgebra.dot(MW,x)*1000
+
+function weight_to_molar(value,x,MW)
+    return (value*LinearAlgebra.dot(MW,x))/1000.0
 end
 
 @inline function reducedvolume(x,rhoc,betav,gammav)
@@ -151,5 +134,64 @@ end
         indxs=unique!(indxs)
     return (JuliaDB.subtable(db, indxs),indxs)
     end
-    
  
+    """
+    loaddippr()
+    loads the DIPPR801 database
+    # Examples
+    ```julia-repl
+    julia> molar_to_weight(55.01, [18.01,16.0] [0.5,0.5])
+    1
+"""
+ loaddippr()=JuliaDB.load("DIPPR801.juliadb")
+
+@inline function _transformVT(V::Real,T::Real,mw,x)
+    return (V,T)
+end
+
+
+
+#transformation of arbitrary molar units to the SI units
+@inline function _transformVT(V::Unitful.Quantity{<:Real, Unitful.𝐋^3*Unitful.𝐍^-1},
+    T::Unitful.Quantity{<:Real, Unitful.𝚯},mw,x)
+    return (Unitful.ustrip(u"m^3/mol"(V)),Unitful.ustrip(u"K"(T)))
+end
+#inversion
+@inline function _transformVT(T::Unitful.Quantity{<:Real, Unitful.𝚯},
+    V::Unitful.Quantity{<:Real, Unitful.𝐋^3*Unitful.𝐍^-1},mw,x)
+    return _transformVT(V,T,mw,x)
+end
+ 
+@inline function _transformVT(V::Unitful.Quantity{<:Real, Unitful.𝐋^-3*Unitful.𝐍^1},
+    T::Unitful.Quantity{<:Real, Unitful.𝚯},mw,x)
+    return (1/Unitful.ustrip(u"mol/m^3"(V)),Unitful.ustrip(u"K"(T)))
+end
+#inversion
+@inline function _transformVT(T::Unitful.Quantity{<:Real, Unitful.𝚯},
+    V::Unitful.Quantity{<:Real, Unitful.𝐋^-3*Unitful.𝐍^1},mw,x
+    )
+    return _transformVT(V,T,mw,x)
+end
+
+@inline function _transformVT(V::Unitful.Quantity{<:Real, Unitful.𝐋^3*Unitful.𝐌^-1},
+    T::Unitful.Quantity{<:Real, Unitful.𝚯},mw,x)
+    return (weight_to_molar(Unitful.ustrip(u"m^3/kg"(V)),mw,x),
+    Unitful.ustrip(u"K"(T)))
+end
+
+@inline function _transformVT(T::Unitful.Quantity{<:Real, Unitful.𝚯},
+    V::Unitful.Quantity{<:Real, Unitful.𝐋^3*Unitful.𝐌^-1}
+    ,mw,x)
+    return _transformVT(V,T,mw,x)
+end
+
+@inline function _transformVT(V::Unitful.Quantity{<:Real, Unitful.𝐋^-3*Unitful.𝐌^1},
+    T::Unitful.Quantity{<:Real, Unitful.𝚯},mw,x)
+    return (weight_to_molar(1/Unitful.ustrip(u"kg/m^3"(V)),mw,x),
+    Unitful.ustrip(u"K"(T)))
+end
+
+@inline function _transformVT(T::Unitful.Quantity{<:Real, Unitful.𝚯},
+    V::Unitful.Quantity{<:Real, Unitful.𝐋^-3*Unitful.𝐌^1},mw,x)
+    return _transformVT(V,T,mw,x)
+end

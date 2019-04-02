@@ -128,10 +128,11 @@ end
 
 @inline _f(model::IAPWS95,rho,T) = _fr(model,rho,T)+_f0(model,rho,T)
 
-function core_helmholtz(model::IAPWS95,rho::R,T::R,x::Array{R,1}=[1.0]) where R<:Real
-    rho = rho*model.molecularWeight*1e-03
-    #R value calculated from molecular weight and specific gas constant
-    return 8.3143713575874e6*T*_f(model,rho,T)
+function core_helmholtz(model::IAPWS95,v::R1,T::R2,x::Array{R3,1}=[1.0]) where R1 <:Real where R2 <:Real where R3 <:Real
+   #R value calculated from molecular weight and specific gas constant
+    #return 8.3143713575874*T*_f(model, molar_to_weight(1/v,[model.molecularWeight],[1.0]),T)
+    #println(molar_to_weight(1/v,[model.molecularWeight],[1.0]))
+    return 8.3143713575874*T*_f(model, 1/molar_to_weight(v,[model.molecularWeight],[1.0]),T)
 end
 
 

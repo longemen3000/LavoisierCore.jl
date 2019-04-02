@@ -1,8 +1,0 @@
-name = "LavoisierCore"
-uuid = "906951d0-34bf-11e9-19fe-f51e2e52315d"
-authors = ["longemen3000 <longemen3000@gmail.com>"]
-version = "0.1.0"
-
-[deps]
-ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
-

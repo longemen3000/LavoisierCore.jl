@@ -1,25 +1,29 @@
-using JuliaDB, ForwardDiff, DiffResults
-include("utils")
+using JuliaDB, ForwardDiff, DiffResults, Unitful
+include("utils.jl")
 
 abstract type AbstractThermoModel end #base model
 abstract type AbstractHelmholtzModel <:  AbstractThermoModel end
-struct AbstractGibbsModel <:  AbstractThermoModel end
-struct AbstractActivityModel <:  AbstractThermoModel end   
+abstract type  AbstractGibbsModel <:  AbstractThermoModel end
+abstract type  AbstractActivityModel <:  AbstractThermoModel end   
 
-"""ischemicaldata(data)
-Checks if a type can be used as a source to extract chemical data
-    
-""" 
+"""
+core_helmholtz(model,V,T,x)
+
+calculates the helmholtz energy. uses the following units:
+v:molar volume, m3/mol ,SI
+T:Temperature, K , SI
+x:molar fraction, adimensional
 
 
-
+"""
 function core_helmholtz(model::M,V,T,x::Array{R,1}) where M<:AbstractHelmholtzModel where R<:Real
-    return 1+V+T
+    throw(error("error x"))
+    return -pi
 end
 
 function _gradient(model::M,V,T,x::Array{R,1}) where M<:AbstractHelmholtzModel where R<:Real
-    d = [V,T]
-    f(d) = core_helmholtz(model,d[1],d[2],d[3:end])
+    d = [V T]
+    f(d) = core_helmholtz(model,d[1],d[2],x)
     return ForwardDiff.gradient(f,d)
 end
 
@@ -29,16 +33,6 @@ function _hessian(model::M,V,T,x::Array{R,1}) where M<:AbstractHelmholtzModel wh
     return ForwardDiff.hessian(f,d)
 end
 
-function _gradient(model::M,V,T,x::Array{R,1}) where M<:AbstractHelmholtzModel where R<:Real
-    f(d) = core_helmholtz(model,d[1],d[2],d[3:end])
-    return ForwardDiff.gradient(f,vcat(V,T,x))
-end
-function _der1(model::M,V,T,x::Array{R,1}) where M<:AbstractHelmholtzModel where R<:Real
-    function f11(d)
-        return core_helmholtz(model,d,T,x)
-    end
-    return ForwardDiff.derivative(f11,V)
-end
 struct ResultDataHelmHoltz
     x::Array{Float64,1}
     fx::Float64
@@ -68,40 +62,56 @@ only gradients (order == 1) and hessians (order == 2) are implemented.
 end
 
 
-function pressure(model::M,rho,T,x::Array{R,1}) where M <: AbstractHelmholtzModel where R<:Real
-    return -_gradient(model,rho,T,x)[1]*rho*rho
+function _pressure(model::M,v,T,x::Array{R,1}) where M <: AbstractHelmholtzModel where R<:Real
+    return -_gradient(model,v,T,x)[1]
 return 
 end
 
-function pressure(diffdata::ResultDataHelmHoltz)
+function _pressure(diffdata::ResultDataHelmHoltz)
     return -diffdata.dfdx[1]
 return 
 end
 
-function entropy(model::M,V,T,x::Array{R,1}) where M <: AbstractHelmholtzModel where R<:Real
+function pressure(model::M,v,T,x::Array{R,1}) where M <: AbstractHelmholtzModel where R <: Real
+    (v2,T2) = _transformVT(v,T,[model.molecularWeight],x)
+    return uconvert(u"bar",_pressure(model,v2,T2,x)[1]*1.0u"Pa")
+return 
+end
+
+function _entropy(model::M,V,T,x::Array{R,1}) where M <: AbstractHelmholtzModel where R<:Real
     return -_gradient(model,V,T,x)[2]
 end
 
-function entropy(diffdata::ResultDataHelmHoltz)
+function entropy(model::M,V,T,x::Array{R,1}) where M <: AbstractHelmholtzModel where R<:Real
+    return _entropy(model,V,T,x)*1.0u"J/mol"
+end
+
+function _entropy(diffdata::ResultDataHelmHoltz)
     return -diffdata.dfdx[2]
-return D
+end
+
+function _enthalpy(model::M,v,T,x::Array{R,1}) where M <: AbstractHelmholtzModel where R<:Real
+    df = _gradient(m,v,T,x)
+    return core_helmholtz(m,v,T,x)-df[2]*T-v*df[1]
+end
+
+function _enthalpy(diffdata::ResultDataHelmHoltz)
+    return diffdata.fx-diffdata.dfdx[2]*diffdata.x[2]-diffdata.dfdx[1]*diffdata.x[1]
 end
 
 
-
-function internal_energy(model::M,V,T,x::Array{R,1}) where M <: AbstractHelmholtzModel where R<:Real
-    return core_helmholtz(model,V,T,x)-_gradient(model,V,T,x)[2]*T
-end
-
-function enthalpy(model::M,V,T,x::Array{R,1}) where M <: AbstractHelmholtzModel where R<:Real
-    return core_helmholtz(model,V,T,x)-_gradient(model,V,T,x)[2]*T-_gradient(model,V,T,x)[1]*V
+function _internal_energy(model::M,v,T,x::Array{R,1}) where M <: AbstractHelmholtzModel where R<:Real
+    return core_helmholtz(m,v,T,x)-_gradient(m,v,T,x)[2]*T
 end
 
 
-function internal_energy(diffdata::ResultDataHelmHoltz)
+function _internal_energy(diffdata::ResultDataHelmHoltz)
     return diffdata.fx-diffdata.x[2]*diffdata.dfdx[2]
 return 
 end
+
+
+
 
 
 
