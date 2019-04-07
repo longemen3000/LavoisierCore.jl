@@ -38,7 +38,7 @@ if you defined your helmholtz equation, then you have access to all those functi
 
 ## Usage example:
 ```
-m = IAPWS95()
+m = IAPWS95() #this model contains everything, so it doesn't need any variables to be created
 
 # with unitful properties, it handles automatically the conversion beetween molar and mass density, 
 #molar and mass especific volume, and the usual temperatures
