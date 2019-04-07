@@ -1,4 +1,4 @@
-include("core.jl")
+
 
 
 struct IAPWS95 <: AbstractHelmholtzModel
@@ -91,8 +91,8 @@ end
     
     res = log(delta)+model.n00[1]+model.n00[2]*tau+model.n00[3]*log(tau)
     
-    for i = 4:8
-     res=res+model.n00[i]*log(-expm1(-model.gamma00[i]*tau))
+ for i = 4:8
+        res=res+model.n00[i]*log(-expm1(-model.gamma00[i]*tau))
     end
     return res
 end
@@ -111,8 +111,8 @@ end
     end
 
     for i = 1:3
-        res=res+(model.nr3[i]*delta^(model.d3[i])) * (tau^model.t3[i]) * 
-        exp(-model.alpha3[i]*abs2(delta-model.epsilon3[i])-model.beta3[i]*abs(tau-model.gamma3[i]))
+           res=res+(model.nr3[i]*delta^(model.d3[i])) * (tau^model.t3[i]) * 
+           exp(-model.alpha3[i]*abs2(delta-model.epsilon3[i])-model.beta3[i]*abs(tau-model.gamma3[i]))
     end
     delta1m2 = (delta-1)^2# 
     tau1m2 = (tau-1)^2
