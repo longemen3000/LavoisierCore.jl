@@ -34,7 +34,7 @@ the package in this moment only have the IAPWS 95 formulation of water, and the 
 * enthalpy
 * entropy
 
-but the bases are capable of implementing any equation that folllows the formulation above
+if you defined your helmholtz equation, then you have access to all those functions.
 
 ## Usage example:
 ```
