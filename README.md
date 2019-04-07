@@ -37,10 +37,23 @@ but the bases are capable of implementing any equation that folllows the formula
 ## Usage example:
 ```
 m = IAPWS95()
+
 # with unitful properties, it handles automatically the conversion beetween molar and mass density, 
-#molar and mass especific volume
+#molar and mass especific volume, and the usual temperatures
+
 julia> pressure(m,(322.0)u"kg/m^3",647.0u"K",[1.0])
 220.64298608634772 bar
+
+julia> pressure(m,55u"cm^3/mol",(647.0)u"K",[1.0])
+220.59360203472647 bar
+
+julia> pressure(m,55u"cm^3/mol",(373.85)u"°C",[1.0])
+220.59360203472647 bar
+
+#Big Floats Support
+julia> pressure(m,big(322.0)u"kg/m^3",big(647.0)u"K",[1.0])
+220.6429860863478813957299832315505132338714379480500058877684060654357069055415 bar
+
 ```
 This package is in heavy development, don't dare to even try to use this in production, but feel free to submit your own Helmholtz equations,the long term idea is to implement the DiferencialEquations.jl of the thermodynamic equations
 
