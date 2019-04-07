@@ -28,10 +28,12 @@ end
 And that's it!, with that, all relevant thermodynamic property's functions will be created, using the power of Julia's multiple dispatch and the powerful tools of automatic differenciation available (ForwardDiff at the moment, a reverse AD tool in the future).
 
 the package in this moment only have the IAPWS 95 formulation of water, and the following properties:
+
 * pressure
 * internal_energy
 * enthalpy
 * entropy
+
 but the bases are capable of implementing any equation that folllows the formulation above
 
 ## Usage example:
