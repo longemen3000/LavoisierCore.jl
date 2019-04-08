@@ -1,4 +1,4 @@
-using JuliaDB, ForwardDiff, DiffResults, Unitful, LinearAlgebra
+using JuliaDB, ForwardDiff, DiffResults, Unitful, LinearAlgebra, Zygote
 include("utils.jl")
 
 abstract type AbstractThermoModel end #base model
@@ -6,8 +6,6 @@ abstract type AbstractHelmholtzModel <:  AbstractThermoModel end
 abstract type  AbstractGibbsModel <:  AbstractThermoModel end
 abstract type  AbstractActivityModel <:  AbstractThermoModel end   
 abstract type AbstractMixingRule end # for mixing rules
-
-
 
 
 """
@@ -37,10 +35,17 @@ end
 
 
 
-function _gradient(model::M,V,T,x::Array{R,1}) where M<:AbstractHelmholtzModel where R<:Real
-    d = [V T]
+function _gradientvt(model::AbstractHelmholtzModel,v,T,x) 
+    d = [v T]
     f(d) = core_helmholtz(model,d[1],d[2],x)
     return ForwardDiff.gradient(f,d)
+end
+
+function _gradientvt2(model::AbstractHelmholtzModel,v,T,x) 
+    vt = [v T]
+    df = DiffResults.GradientResult(vt)
+    df = ForwardDiff.gradient!(df,z->core_helmholtz(model,z[1],z[2],x),vt)
+    return (DiffResults.value(df),DiffResults.gradient(df))
 end
 
 function _dfdv(model::AbstractHelmholtzModel,v,T,x)
@@ -48,21 +53,26 @@ function _dfdv(model::AbstractHelmholtzModel,v,T,x)
         z->core_helmholtz(model,z,T,x),v)
 end
 
-function _d2fdv2(model::AbstractHelmholtzModel,v,T,x)
-    return ForwardDiff.derivative(
-        z->_dfdv(model,z,T,x),v)
-end
-
 function _dfdt(model::AbstractHelmholtzModel,v,T,x)
     return ForwardDiff.derivative(
         z->core_helmholtz(model,v,z,x),T)
 end
 
-function _hessian(model::M,V,T,x::Array{R,1}) where M<:AbstractHelmholtzModel where R<:Real
-    d = [V,T]
-    f(d) = core_helmholtz(model,d[1],d[2],d[3:end])
-    return ForwardDiff.hessian(f,d)
+function _hessianvt(model::AbstractHelmholtzModel,v,T,x)
+    f(d) = core_helmholtz(model,d[1],d[2],x)
+    return ForwardDiff.hessian(f,[v T])
 end
+
+function _hessianvt2(model::AbstractHelmholtzModel,v,T,x)
+    vt = [v T]
+    fhelmholtz = z->core_helmholtz(model,z[1],z[2],x)
+    df = DiffResults.HessianResult(vt)
+    df = ForwardDiff.hessian!(df,fhelmholtz,vt)
+    return (DiffResults.value(df),
+    DiffResults.gradient(df),
+    DiffResults.hessian(df))
+end
+
 
 
 struct HelmholtzResultData
@@ -70,7 +80,7 @@ struct HelmholtzResultData
     diffresult::DiffResults.DiffResult
 end
 
-function diffdata(model::AbstractHelmholtzModel ,V,T,x,order::Int64 = 2)
+function _diffdata(model::AbstractHelmholtzModel ,V,T,x,order::Int64 = 2)
     d =  vcat(V,T,x[:])
     #f(d) = core_helmholtz(model,d[1],d[2],d[3:end])
     f(d) = core_helmholtz(model,d[1],d[2],d[3:end])
@@ -90,28 +100,48 @@ only gradients (order == 1) and hessians (order == 2) are implemented.
     end
     return HelmholtzResultData(d,res)
 end
+function diffdata(model::AbstractHelmholtzModel ,v,T,x,order::Int64 = 2)
+(v2,T2)=_transformVT(v,T,model.molecularWeight,x)
+return _diffdata(model,v2,T2,x,order)
+end
+
+_valuevt(df::HelmholtzResultData)  = df.value
+_helmholtzvt(df::HelmholtzResultData)  = DiffResults.value(df.diffresult)
+_gradientvt(df::HelmholtzResultData)  = DiffResults.gradient(df.diffresult)[1:2]
+_hessianvt(df::HelmholtzResultData)  = DiffResults.hessian(df.diffresult)[1:2,1:2]
 
 #
-#Pressure
+#Pressure, a single derivative is faster
 #
-function _pressure(model::AbstractHelmholtzModel,v,T,x)
-    return -_gradient(model,v,T,x)[1]
+function _pressure_impl(model::AbstractHelmholtzModel,v,T,x)
+    return -_dfdv(model,v,T,x)
 return 
 end
 
-
-function _pressure(diffdata::HelmholtzResultData)
-    return -diffdata.dfdx[1]
+function _pressure(df::HelmholtzResultData)
+    return -_gradientvt(df)[1]
 return 
 end
 
 function pressure(model::AbstractHelmholtzModel,v,T,x) 
-    (v2,T2) = _transformVT(v,T,[model.molecularWeight],x)
-    return uconvert(u"bar",-_dfdv(model,v2,T2,x)*1.0u"Pa")
-return 
+    (v2,T2) = _transformVT(v,T,model.molecularWeight,x)
+    return _pressure_impl(model,v2,T2,x)*1.0u"Pa"
 end
 
+function pressure(df::HelmholtzResultData) 
+    return _pressure(df)*1.0u"Pa"
+end
 
+function compressibility_factor(model::AbstractHelmholtzModel,v,T,x) 
+    (v2,T2) = _transformVT(v,T,model.molecularWeight,x)
+    return _pressure_impl(model,v2,T2,x)*v2/(ustrip(Unitful.R)*T2)
+end
+
+function compressibility_factor(df::HelmholtzResultData) 
+    (v,T)=_valuevt(df)
+    P= _pressure(df)
+    return P*v/(Unitful.ustrip(Unitful.R)*T)
+end
 
 
 #
@@ -119,34 +149,47 @@ end
 #
 
 function _entropy(model::AbstractHelmholtzModel,v,T,x)
-    return -_gradient(model,v,T,x)[2]
+    return -_dfdt(model,v,T,x)
 end
 
-function _entropy(diffdata::HelmholtzResultData)
-    return -diffdata.dfdx[2]
+function _entropy(df::HelmholtzResultData)
+    return -_gradientvt(df)[2]
 end
 
 function entropy(model::AbstractHelmholtzModel,v,T,x) 
-    (v2,T2) = _transformVT(v,T,[model.molecularWeight],x)
-    return -_dfdt(model,v2,T2,x)*1.0u"J/mol"
+    (v2,T2) = _transformVT(v,T,model.molecularWeight,x)
+    return _entropy(model,v2,T2,x)*1.0u"J/mol/K"
+end
+
+function entropy(df::HelmholtzResultData)
+    return _entropy(df)*1.0u"J/mol/K"
 end
 
 #
 #enthalpy
 #
 function _enthalpy(model::AbstractHelmholtzModel,v,T,x)
-    df = _gradient(m,v,T,x)
-    return core_helmholtz(m,v,T,x)-df[2]*T-v*df[1]
+    (f,df) = _gradientvt2(m,v,T,x)
+    return f - df[1]*v-df[2]*T
 end
 
-function _enthalpy(diffdata::HelmholtzResultData)
-    return diffdata.fx-diffdata.dfdx[2]*diffdata.x[2]-diffdata.dfdx[1]*diffdata.x[1]
+
+
+function _enthalpy(df::HelmholtzResultData)
+    x = _valuevt(df)
+    a = _helmholtzvt(df)
+    da= _gradientvt(df)
+    return a - LinearAlgebra.dot(da,x)
 end
 
 
 function enthalpy(model::AbstractHelmholtzModel,v,T,x) 
-    (v2,T2) = _transformVT(v,T,[model.molecularWeight],x)
+    (v2,T2) = _transformVT(v,T,model.molecularWeight,x)
     return _enthalpy(model,v2,T2,x)*1.0u"J/mol"
+end
+
+function enthalpy(df::HelmholtzResultData)
+    return _enthalpy(df::HelmholtzResultData)*1.0u"J/mol"
 end
 
 #
@@ -154,7 +197,7 @@ end
 #
 function _internal_energy(model::AbstractHelmholtzModel,v,T,x)
     u1 = core_helmholtz(model,v,ForwardDiff.Dual{typeof(T)}(T, one(T)),x)
-    return core_helmholtz(model,v,T,x)-_gradient(model,v,T,x)[2]*T
+    return core_helmholtz(model,v,T,x)-_gradientvt(model,v,T,x)[2]*T
 end
 #
 #Implementation directly using dual numbers, is faster as expected, but dont derive it!
@@ -164,18 +207,82 @@ function _internal_energy2(model::AbstractHelmholtzModel,v,T,x)
     return u1.value - T*u1.partials.values[1]
 end
 
-function _internal_energy(diffdata::HelmholtzResultData)
-    return diffdata.fx-diffdata.x[2]*diffdata.dfdx[2] 
+function _internal_energy(df::HelmholtzResultData)
+    a = _helmholtzvt(df)
+    (v,T)=_valuevt(df)
+    da = _gradientvt(df)
+    return a-v*da[2]
 end
 
 function internal_energy(model::AbstractHelmholtzModel,v,T,x) 
-    (v2,T2) = _transformVT(v,T,[model.molecularWeight],x)
+    (v2,T2) = _transformVT(v,T,model.molecularWeight,x)
     return _internal_energy2(model,v2,T2,x)*1.0u"J/mol"
 end
 
-#
-#isobaric_heat_capacity
-#
+function internal_energy(df::HelmholtzResultData) 
+    return _internal_energy(df)*1.0u"J/mol"
+end
+
+##########
+# Cv
+##########
+function _isochoric_heat_capacity(model::AbstractHelmholtzModel,v,T,x)
+    d2f = _hessianvt(model,v,T,x)
+    return  -T*d2f[2,2]
+    D
+end
+
+function _isochoric_heat_capacity(df::HelmholtzResultData)
+    (v,T)= _valuevt(df)
+    d2f = _hessianvt(df)
+    return  -T*d2f[2,2]
+    
+end
+
+function isochoric_heat_capacity(model::AbstractHelmholtzModel,v,T,x)
+    (v2,T2)=_transformVT(v,T,model.molecularWeight,x)
+    return     _isocoric_heat_capacity(model,v2,T2,x)*1.0u"J/mol/K"
+end
+
+function isochoric_heat_capacity(df::HelmholtzResultData)
+    return     _isocoric_heat_capacity(df)*1.0u"J/mol/K"
+end
+##########
+# Cp
+##########
+function _isobaric_heat_capacity(model::AbstractHelmholtzModel,v,T,x)
+    d2f = _hessianvt(model,v,T,x)
+    return  -v*d2f[1,2]-T*d2f[2,2]  
+end
+
+function _isobaric_heat_capacity(df::HelmholtzResultData)
+    (v,T)=_valuevt(df)
+    d2f = _hessianvt(df)
+    return  -v*d2f[1,2]-T*d2f[2,2]   
+end
+
+function isobaric_heat_capacity(model::AbstractHelmholtzModel,v,T,x)
+    (v2,T2)=_transformVT(v,T,model.molecularWeight,x)
+    return     _isobaric_heat_capacity(model,v2,T2,x)*1.0u"J/mol/K"
+end
+
+function isobaric_heat_capacity(df::HelmholtzResultData)
+  return _isobaric_heat_capacity(df::HelmholtzResultData)*1.0u"J/mol/K"
+end
+
+function _sound_speed(model::AbstractHelmholtzModel,v,T,x)
+    d2f = _hessianvt(model,v,T,x)
+    return  v*sqrt(d2f[1,1]) 
+end
+
+function sound_speed(model::AbstractHelmholtzModel,v,T,x)
+    (v2,T2)=_transformVT(v,T,model.molecularWeight,x)
+    return     _sound_speed(model,v2,T2,x)*1.0u"m/s"
+end
+
+
+
+
 
 ####################################################
 
@@ -301,8 +408,6 @@ function mixing_matrix!(op,A,p)
     end
     return A
 end
-
-
 
 
 

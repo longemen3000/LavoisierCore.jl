@@ -2,7 +2,7 @@
 
 
 struct IAPWS95 <: AbstractHelmholtzModel
-    molecularWeight::Float64
+    molecularWeight::Array{Float64,1}
     n00::Array{Float64,1}
     gamma00::Array{Float64,1}
     nr1::Array{Float64,1}
@@ -79,7 +79,7 @@ struct IAPWS95 <: AbstractHelmholtzModel
     D =[700, 800]
     A =[0.32,0.32]
     beta4 =[0.3, 0.3]
-    return new(18.015268,n00,gamma00,nr1,d1,t1,nr2,c2,d2,t2,gamma2,nr3,d3,
+    return new([18.015268],n00,gamma00,nr1,d1,t1,nr2,c2,d2,t2,gamma2,nr3,d3,
     t3,alpha3,beta3,gamma3,epsilon3,nr4,a4,b4,B,C,D,A,beta4)
     end
 end
@@ -132,7 +132,7 @@ function core_helmholtz(model::IAPWS95,v::R1,T::R2,x::Array{R3,1}=[1.0]) where R
    #R value calculated from molecular weight and specific gas constant
     #return 8.3143713575874*T*_f(model, molar_to_weight(1/v,[model.molecularWeight],[1.0]),T)
     #println(molar_to_weight(1/v,[model.molecularWeight],[1.0]))
-    return 8.3143713575874*T*_f(model, 1/molar_to_weight(v,[model.molecularWeight],[1.0]),T)
+    return 8.3143713575874*T*_f(model, 1/molar_to_weight(v,model.molecularWeight,[1.0]),T)
 end
 
 
