@@ -97,7 +97,7 @@ end
     return res
 end
 
-@inline function _fr(model::IAPWS95,rho,T)
+function _fr(model::IAPWS95,rho,T)
     delta = rho/322
     tau = 647.096/T
    
@@ -157,4 +157,6 @@ function _rholsatexp(T) #Saturated liquid density equation, eq 2.6, #SI units
     b = [1.99274064,1.09965342,-0.510839303,-1.75493479,-45.5170352,-6.74694450e05]
     return 322*(1.0+b[1]*d^(1.0/3.0)+b[2]*d^(2.0/3.0)+b[3]*d^(5.0/3.0)+b[4]*d^(16.0/3.0)+b[5]*d^(43.0/3.0)+b[6]*d^(110.0/3.0))
 end
+
+
 

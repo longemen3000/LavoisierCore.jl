@@ -3,11 +3,12 @@ module LavoisierCore
 
 include("core.jl")
 include("IAPWS95.jl")
+include("gerg2008.jl")
 
 
-export IAPWS95
-export AbstractHelmholtzModel,diffdata , entropy, enthalpy, pressure, internal_energy
-export normalizefrac,normalizefrac!,reducedvolume,reducedtemperature,ischemicaldata,property,compound
+export IAPWS95,GERG2008
+export AbstractHelmholtzModel,diffdata, helmholtz, entropy, enthalpy, pressure, internal_energy, isochoric_heat_capacity, isochoric_heat_capacity
+export normalizefrac,normalizefrac!,mixing_rule,mixing_rule_asymetric,mixing_matrix!,mixing_matrix
 export molar_to_weight,weight_to_molar
 
 end

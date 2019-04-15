@@ -31,41 +31,6 @@ function weight_to_molar(value,x,MW)
     return (value*LinearAlgebra.dot(MW,x))/1000.0
 end
 
-@inline function reducedvolume(x,rhoc,betav,gammav)
-N = length(x)
-res1 = x[N]^2/rhoc[N]
-for i = 1:N-1
-    
-    res1 += x[i]^2/rhoc[i]
-    for j=(i+1):N
-        res1 += 0.25*x[i]*x[j]*
-        betav[i,j]*
-        gammav[i,j]*
-        ((x[i]+x[j])/(x[i]*betav[i,j]^2 + x[j])) *
-        (rhoc[i]^(-1/3)+rhoc[j]^(-1/3))
-    end
-end
-
-return 1.0/res1
-end
-
-
-
-@inline function reducedtemperature(x,Tc,betat,gammat)
-N = length(x)
-res1 = x[N]^2*Tc[N]
-for i = 1:N-1
-    res1 += x[i]^2*Tc[i]
-    for j=(i+1):N
-        res1 += 2*x[i]*x[j]*
-        betat[i,j]*
-        gammat[i,j]*
-        ((x[i]+x[j])/(x[i]*betat[i,j]^2 + x[j])) *
-        sqrt(Tc[i]*Tc[j])
-    end
-end
-return res1
-end
 
 function normalizefrac!(x)
     summ = sum(x)
@@ -122,53 +87,39 @@ end
 
 
 
- @inline function _transformVT(V,T,mw,x)
-    return (V,T)
-end
+
 
 #transformation of arbitrary molar units to the SI units
-
-
-@inline function _transformVT(V::Unitful.Quantity{<:Real, Unitful.𝐋^3*Unitful.𝐍^-1},
-    T::Unitful.Quantity{<:Real, Unitful.𝚯},mw,x)
-    return (Unitful.ustrip(u"m^3/mol"(V)),Unitful.ustrip(u"K"(T)))
-end
-#inversion
-@inline function _transformVT(T::Unitful.Quantity{<:Real, Unitful.𝚯},
-    V::Unitful.Quantity{<:Real, Unitful.𝐋^3*Unitful.𝐍^-1},mw,x)
-    return _transformVT(V,T,mw,x)
-end
- 
-@inline function _transformVT(V::Unitful.Quantity{<:Real, Unitful.𝐋^-3*Unitful.𝐍^1},
-    T::Unitful.Quantity{<:Real, Unitful.𝚯},mw,x)
-    return (1/Unitful.ustrip(u"mol/m^3"(V)),Unitful.ustrip(u"K"(T)))
-end
-#inversion
-@inline function _transformVT(T::Unitful.Quantity{<:Real, Unitful.𝚯},
-    V::Unitful.Quantity{<:Real, Unitful.𝐋^-3*Unitful.𝐍^1},mw,x
-    )
-    return _transformVT(V,T,mw,x)
+@inline function _transform_v(v,mw,x)
+    return v
 end
 
-@inline function _transformVT(V::Unitful.Quantity{<:Real, Unitful.𝐋^3*Unitful.𝐌^-1},
-    T::Unitful.Quantity{<:Real, Unitful.𝚯},mw,x)
-    return (weight_to_molar(Unitful.ustrip(u"m^3/kg"(V)),mw,x),
-    Unitful.ustrip(u"K"(T)))
+@inline function _transform_v(v::Unitful.Quantity{<:Real, Unitful.𝐋^3*Unitful.𝐍^-1},mw,x)
+    return Unitful.ustrip(u"m^3/mol"(v))
 end
 
-@inline function _transformVT(T::Unitful.Quantity{<:Real, Unitful.𝚯},
-    V::Unitful.Quantity{<:Real, Unitful.𝐋^3*Unitful.𝐌^-1}
-    ,mw,x)
-    return _transformVT(V,T,mw,x)
+@inline function _transform_v(v::Unitful.Quantity{<:Real, Unitful.𝐋^-3*Unitful.𝐍^1},mw,x)
+    return 1/Unitful.ustrip(u"mol/m^3"(v))
 end
 
-@inline function _transformVT(V::Unitful.Quantity{<:Real, Unitful.𝐋^-3*Unitful.𝐌^1},
-    T::Unitful.Quantity{<:Real, Unitful.𝚯},mw,x)
-    return (weight_to_molar(1/Unitful.ustrip(u"kg/m^3"(V)),mw,x),
-    Unitful.ustrip(u"K"(T)))
+@inline function _transform_v(v::Unitful.Quantity{<:Real, Unitful.𝐋^-3*Unitful.𝐌^1},mw,x)
+    return weight_to_molar(1/Unitful.ustrip(u"kg/m^3"(v)),mw,x)
 end
 
-@inline function _transformVT(T::Unitful.Quantity{<:Real, Unitful.𝚯},
-    V::Unitful.Quantity{<:Real, Unitful.𝐋^-3*Unitful.𝐌^1},mw,x)
-    return _transformVT(V,T,mw,x)
+
+@inline function _transform_v(v::Unitful.Quantity{<:Real, Unitful.𝐋^3*Unitful.𝐌^-1},mw,x)
+    return weight_to_molar(Unitful.ustrip(u"m^3/kg"(v)),mw,x)
 end
+
+@inline function _transform_T(T::TT) where TT <: Real
+end
+
+@inline function _transform_T(T::TT) where TT <: Unitful.Temperature
+        return Unitful.ustrip(u"K"(T))
+end
+
+function _transformVT(V,T,mw,x)
+    return (_transform_v(V,mw,x),_transform_T(T))
+end
+
+
