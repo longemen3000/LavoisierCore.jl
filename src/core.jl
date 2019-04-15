@@ -1,4 +1,4 @@
-using JuliaDB, ForwardDiff, DiffResults, Unitful, LinearAlgebra, Zygote
+using JuliaDB, ForwardDiff, DiffResults, Unitful, LinearAlgebra
 include("utils.jl")
 
 abstract type AbstractThermoModel end #base model
@@ -19,12 +19,11 @@ x:molar fraction, adimensional
 
 """
 function core_helmholtz(model::M,V,T,x) where M <:AbstractHelmholtzModel
-return 1
 end
 
 function helmholtz(model::AbstractHelmholtzModel,v,T,x)
-    (v2,T2) = _transformVT(v,T,[model.molecularWeight],x)
-    return core_helmholtz(model,v2,T2,x)[1]*1.0u"J/mol"
+    (v2,T2) = _transformVT(v,T,model.molecularWeight,x)
+    return core_helmholtz(model,v2,T2,x)*1.0u"J/mol"
 end
 
 
@@ -248,7 +247,7 @@ function isochoric_heat_capacity(df::HelmholtzResultData)
     return     _isocoric_heat_capacity(df)*1.0u"J/mol/K"
 end
 ##########
-# Cp
+# Cp,testing
 ##########
 function _isobaric_heat_capacity(model::AbstractHelmholtzModel,v,T,x)
     d2f = _hessianvt(model,v,T,x)
@@ -269,7 +268,9 @@ end
 function isobaric_heat_capacity(df::HelmholtzResultData)
   return _isobaric_heat_capacity(df::HelmholtzResultData)*1.0u"J/mol/K"
 end
-
+#######
+# Speed of sound, testing
+#######
 function _sound_speed(model::AbstractHelmholtzModel,v,T,x)
     d2f = _hessianvt(model,v,T,x)
     return  v*sqrt(d2f[1,1]) 
@@ -340,7 +341,6 @@ end
 #the mayor example is the GERG2008 equation, where
 #op_asym(xi,xj,Aij) = (xi+xj)/(Aij^2*xi + xj)
 #
-#
 function mixing_rule_asymetric(op,op_asym,x,p,A,A_asym)
     N = length(x)
     checkbounds(A,N,N)
@@ -348,13 +348,16 @@ function mixing_rule_asymetric(op,op_asym,x,p,A,A_asym)
     @boundscheck checkbounds(p,N)
     @inbounds begin
         res1 = zero(eltype(x))
+        
         for i = 1 : N
+            x[i] !=0 && begin
             res1 += p[i] * x[i]^2
-                 for j = 1 : i - 1
-                res1 += 2 * x[i] * x[j] * op(p[i], p[j])*A[i,j] *op_asym(x[i],x[j],A_asym[i,j])
+                for j = 1 : i - 1
+                    res1 += 2 * x[i] * x[j] * op(p[i], p[j])*A[i,j] *op_asym(x[i],x[j],A_asym[i,j])
+                end
             end
         end
-    end
+        end
     return res1
 end
 
@@ -365,7 +368,8 @@ arithmetic_mean_rule(a,b)=(a+b)/2
 
 harmonic_mean_rule(a,b)=2*a*b/(a+b)
 
-_power_mean_rule(a,b,n)=((a^n + b^n)/2)^(1/n)
+_power_mean_rule(a,b,n)=((a^(1/n) + b^(1/n))/2)^n
+
 
 power_mean_rule(n) =(a,b)-> _power_mean_rule(a,b,n)
 
@@ -407,6 +411,7 @@ function mixing_matrix!(op,A,p)
         end
     end
     return A
+
 end
 
 
