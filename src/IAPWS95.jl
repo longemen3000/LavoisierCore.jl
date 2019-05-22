@@ -158,5 +158,14 @@ function _rholsatexp(T) #Saturated liquid density equation, eq 2.6, #SI units
     return 322*(1.0+b[1]*d^(1.0/3.0)+b[2]*d^(2.0/3.0)+b[3]*d^(5.0/3.0)+b[4]*d^(16.0/3.0)+b[5]*d^(43.0/3.0)+b[6]*d^(110.0/3.0))
 end
 
+criticalDensity(model::IAPWS95)=[17873.72799560906] #mol/m3
+molecularWeight(model::IAPWS95) = [18.015268] #MW
+criticalTemperature(model::IAPWS95) = [647.096] #kelvin
+criticalVolume(model::IAPWS95) = 1 ./criticalDensity(model) #m3/mol
 
-
+#random volume, function used at stocastic equilibrium
+function random_volume(model::IAPWS95,P0,T0,x0)
+    min_v = 1.0/(1000*1000/18.015268) #1000 kg/m3, density of water at 4°C
+    max_v = Unitful.ustrip(Unitful.R)*T0/P0
+    return min_v + 2*(max_v-min_v)*rand() 
+end

@@ -1,6 +1,7 @@
 using LinearAlgebra, JuliaDB, Unitful
 
 
+
 """
     disallowmissing(x)
     transforms an array of type Array{Union{Missing,T},N}, to Array{T,N},
@@ -86,13 +87,11 @@ end
 
 
 
-
-
-
 #transformation of arbitrary molar units to the SI units
 @inline function _transform_v(v,mw,x)
-    return v
+    return 1.0*v
 end
+
 
 @inline function _transform_v(v::Unitful.Quantity{<:Real, Unitful.𝐋^3*Unitful.𝐍^-1},mw,x)
     return Unitful.ustrip(u"m^3/mol"(v))
@@ -111,7 +110,8 @@ end
     return weight_to_molar(Unitful.ustrip(u"m^3/kg"(v)),mw,x)
 end
 
-@inline function _transform_T(T::TT) where TT <: Real
+@inline function _transform_T(T)
+    return 1.0*T
 end
 
 @inline function _transform_T(T::TT) where TT <: Unitful.Temperature

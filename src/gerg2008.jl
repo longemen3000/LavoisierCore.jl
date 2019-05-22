@@ -51,17 +51,17 @@ struct GERG2008 <: AbstractHelmholtzModel
     k_pol_ijk::Array{Int64,1}
     k_exp_ijk::Array{Int64,1}
     function GERG2008(xsel = collect(1:21))
-        
+
         N=length(xsel)
 
         molecularWeight = [16.04246,28.0134,44.0095,30.06904,44.09562,58.1222,58.1222,72.14878,72.14878,86.17536,100.20194,
         114.22852,128.2551,142.28168,2.01588,31.9988,28.0101,18.01528,34.08088,4.002602,39.948]
         criticalTemperature = [190.564,126.192,304.1282,305.322,369.825,407.817,425.125,460.35,469.7,507.82,540.13,
-        569.32,594.55,617.7,33.19,154.595,132.86,647.096,373.1,5.1953,150.687] 
+        569.32,594.55,617.7,33.19,154.595,132.86,647.096,373.1,5.1953,150.687]
         criticalDensity =[10.139342719,11.1839,10.624978698,6.87085454,5.000043088,3.86014294,
         3.920016792,3.271,3.215577588,2.705877875,2.315324434,2.056404127,1.81,
         1.64,14.94,13.63,10.85,17.87371609,10.19,17.399,13.407429659] #molar density, in mol/dm3
-        
+
         #iterations for the ideal part, for now i can´t design a general function
         #with alternating indices like in this form.
         iter_ideal = [4, 3, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 4, 2, 2, 3, 2, 0, 0]
@@ -72,9 +72,9 @@ struct GERG2008 <: AbstractHelmholtzModel
         iter0 = (findall(z->z==0,iter_ideal[xsel]))
         ideal_iters = [iter4,iter3,iter2,iter0]
 
-        
-        
-        
+
+
+
         nr = hcat([19.597508817,-83.959667892,3.00088,0.76315,0.00460,8.74432,-4.46921], #methane
         [11.083407489,-22.202102428,2.50031,0.13732,-0.14660,0.90066,0.0] ,     #nitrogen
         [11.925152758,-16.118762264,2.50002,2.04452,-1.06044,2.03366,0.01393],  #carbon dioxide
@@ -209,13 +209,13 @@ struct GERG2008 <: AbstractHelmholtzModel
         t0ik5=[0.500,1.250,1.875,0.125,1.500,1.000,0.750,1.500,0.625,2.625,5.000,4.000,4.500,3.000,4.000,6.000]
         k_exp_ik5 = length(c0ik5)
         k_pol_ik5 = length(d0ik5) - k_exp_ik5
-        
+
         #helium
         c0ik6=[1,1,1,1,1,2,3,3]
         d0ik6=[1,1,1,4,1,3,5,5,5,2,1,2]
         t0ik6=[0.000,0.125,0.750,1.000,0.750,2.625,0.125,1.250,2.000,1.000,4.500,5.000]
         k_exp_ik6 = length(c0ik6)
-        k_pol_ik6 = length(d0ik6) - k_exp_ik6     
+        k_pol_ik6 = length(d0ik6) - k_exp_ik6
 
         c0ik = [c0ik2,c0ik2,c0ik3,c0ik2,c0ik1,
                 c0ik1,c0ik1,c0ik1,c0ik1,c0ik1,
@@ -246,12 +246,12 @@ struct GERG2008 <: AbstractHelmholtzModel
                     k_exp_ik1,k_exp_ik1,k_exp_ik1,k_exp_ik1,k_exp_ik4,
                     k_exp_ik1,k_exp_ik1,k_exp_ik5,k_exp_ik1,k_exp_ik6,
                     k_exp_ik1)
-        
+
         fgammat = (a,b) -> 0.5*(a+b)/sqrt(a*b)
-        fgammav = (a,b) -> 4*(a+b)/(a^(1/3)+b^(1/3))^3          
+        fgammav = (a,b) -> 4*(a+b)/(a^(1/3)+b^(1/3))^3
 
         gamma_T = mixing_matrix(fgammat,criticalTemperature)
-        
+
         gamma_v = mixing_matrix(fgammav,1 ./ criticalDensity)
 
         vector_beta_v=[0.9987213770,0.9995180720,0.9975478660,1.0048270700,0.9791059720,
@@ -315,13 +315,13 @@ struct GERG2008 <: AbstractHelmholtzModel
         1.0,1.0]
 
         beta_T=gerg_betamatrix_from_vector(vector_beta_T,x->1/x)
-        
+
         indice1 = [1,1,1,1,1,1,1,2,2,4,4,4,5,5,6]
         indice2 = [2,3,4,5,6,7,15,3,4,5,6,7,6,7,7]
         value_eq = 1:length(indice1)
 
         Aij_indices = SparseArrays.spzeros(Int64,21,21)
-        
+
         for i = 1:length(value_eq)
            Aij_indices[indice1[i],indice2[i]] = value_eq[i]
         end
@@ -460,7 +460,7 @@ struct GERG2008 <: AbstractHelmholtzModel
         Float64[],
         Float64[]
         ]
-        
+
 
         length_k_ijk = length(dijk)
         k_pol_ijk = Array{Int64,1}(undef,length_k_ijk)
@@ -469,32 +469,32 @@ struct GERG2008 <: AbstractHelmholtzModel
             k_exp_ijk[i] = length(etaijk[i])
             k_pol_ijk[i] = length(dijk[i]) - k_exp_ijk[i]
         end
-        return new(N,molecularWeight,criticalDensity,criticalTemperature,
-        ideal_iters,nr,zeta,n0ik,t0ik,d0ik,c0ik,
-        k_pol_ik,k_exp_ik,gamma_v,gamma_T,beta_v,beta_T,
-        Aij_indices,fij,dijk,tijk,nijk,etaijk,epsijk,betaijk,gammaijk, k_pol_ijk,k_exp_ijk)
+        return new(N,molecularWeight[xsel],criticalDensity[xsel],criticalTemperature[xsel],
+        ideal_iters,nr[:,xsel],zeta[:,xsel],n0ik[xsel],t0ik[xsel],d0ik[xsel],c0ik[xsel],
+        k_pol_ik[xsel],k_exp_ik[xsel],gamma_v[xsel,xsel],gamma_T[xsel,xsel],beta_v[xsel,xsel],beta_T[xsel,xsel],
+        Aij_indices[xsel,xsel],fij,dijk,tijk,nijk,etaijk,epsijk,betaijk,gammaijk, k_pol_ijk,k_exp_ijk)
     end
 end
 
 
 function _f0(model::GERG2008,rho,T,x)
-    
-    
+
+
     RR = 8.314472/8.314510
-    res = zero(eltype(rho))   
+    res = zero(eltype(rho))
     x0 = zero(eltype(x))  #for comparison
     ao1 =zero(eltype(T))
     ao2 =zero(eltype(T))
     ao_zero =zero(eltype(T))
-    
-    
+
+
     for i in model.ideal_iters[1]
-        x[i] !=x0 && begin   
+        x[i] !=x0 && begin
         ao2 =ao_zero
-        ao3 =ao_zero 
+        ao3 =ao_zero
         delta = rho/model.criticalDensity[i]
         tau = model.criticalTemperature[i]/T
-        ao1 =  model.nr[1,i]+ model.nr[2,i]*tau + model.nr[3,i]*log(tau) 
+        ao1 =  model.nr[1,i]+ model.nr[2,i]*tau + model.nr[3,i]*log(tau)
         ao2 = model.nr[4,i]*log(abs(sinh(model.zeta[1,i]*tau))) - model.nr[5,i]*log(cosh(model.zeta[2,i]*tau))+
         model.nr[6,i]*log(abs(sinh(model.zeta[3,i]*tau))) - model.nr[7,i]*log(cosh(model.zeta[4,i]*tau))
         ao3 = log(delta)
@@ -509,7 +509,7 @@ function _f0(model::GERG2008,rho,T,x)
         ao3 =ao_zero
         delta = rho/model.criticalDensity[i]
         tau = model.criticalTemperature[i]/T
-        ao1 =  model.nr[1,i]+ model.nr[2,i]*tau + model.nr[3,i]*log(tau)  
+        ao1 =  model.nr[1,i]+ model.nr[2,i]*tau + model.nr[3,i]*log(tau)
         ao2 = model.nr[4,i]*log(abs(sinh(model.zeta[1,i]*tau))) - model.nr[5,i]*log(cosh(model.zeta[2,i]*tau))+
         model.nr[6,i]*log(abs(sinh(model.zeta[3,i]*tau)))
         ao3 = log(delta)
@@ -519,13 +519,13 @@ function _f0(model::GERG2008,rho,T,x)
     end
 
     for i in model.ideal_iters[3]
-      x[i] !=x0 && begin   
+      x[i] !=x0 && begin
       ao2 =ao_zero
-      ao3 =ao_zero    
+      ao3 =ao_zero
       delta = rho/model.criticalDensity[i]
       tau = model.criticalTemperature[i]/T
       ao1 =  model.nr[1,i]+ model.nr[2,i]*tau + model.nr[3,i]*log(tau)
-      ao2 = model.nr[4,i]*log(abs(sinh(model.zeta[1,i]*tau))) - model.nr[5,i]*log(cosh(model.zeta[2,i]*tau))  
+      ao2 = model.nr[4,i]*log(abs(sinh(model.zeta[1,i]*tau))) - model.nr[5,i]*log(cosh(model.zeta[2,i]*tau))
       ao3 = log(delta)
       a0 = RR*(ao1+ao2)+ao3
       res +=x[i]*(a0+log(x[i]))
@@ -535,12 +535,12 @@ function _f0(model::GERG2008,rho,T,x)
     for i in model.ideal_iters[4]
             x[i] !=x0 && begin
             ao2 =ao_zero
-            ao3 =ao_zero    
+            ao3 =ao_zero
             delta = rho/model.criticalDensity[i]
             tau = model.criticalTemperature[i]/T
            # println((delta,tau))
             #println(ao1)
-            ao1 =  model.nr[1,i]+ model.nr[2,i]*tau + model.nr[3,i]*log(tau)        
+            ao1 =  model.nr[1,i]+ model.nr[2,i]*tau + model.nr[3,i]*log(tau)
             ao3 = log(delta)
             a0 = RR*(ao1)+ao3
             #println(model.nr[4,i]*log(abs(sinh(model.zeta[1,i]*tau))))
@@ -558,13 +558,13 @@ _gerg_asymetric_mix_rule(xi,xj,b)= b*(xi+xj)/(xi*b^2+xj)
 
 function _delta(model::GERG2008,rho,T,x)
     rhor = 1/mixing_rule_asymetric(power_mean_rule(3),_gerg_asymetric_mix_rule,
-    x,  1 ./ model.criticalDensity,model.gamma_v,model.beta_v) 
+    x,  1 ./ model.criticalDensity,model.gamma_v,model.beta_v)
     return rho/rhor
 end
 
 function _tau(model::GERG2008,rho,T,x)
     Tr = mixing_rule_asymetric(geometric_mean_rule,_gerg_asymetric_mix_rule,
-    x,model.criticalTemperature,model.gamma_T,model.beta_T) 
+    x,model.criticalTemperature,model.gamma_T,model.beta_T)
     return Tr/T
 end
 
@@ -582,18 +582,18 @@ for i = 1:model.N
         for k = 1:model.k_pol_ik[i]
             res1+=model.n0ik[i][k]*
                 (delta^model.d0ik[i][k])*
-                (tau^model.t0ik[i][k]) 
+                (tau^model.t0ik[i][k])
         end
-        
+
         for k = (model.k_pol_ik[i]+1):(model.k_exp_ik[i]+model.k_pol_ik[i])
-            
+
             res1+=model.n0ik[i][k]*
                 (delta^model.d0ik[i][k])*
-                (tau^model.t0ik[i][k])* 
+                (tau^model.t0ik[i][k])*
                 exp(-delta^model.c0ik[i][k-model.k_pol_ik[i]])
         end
         res+= x[i]*res1
-       
+
     end
 end
 
@@ -605,7 +605,7 @@ function _fr2(model::GERG2008,delta,tau,x)
     res0 =zero(eltype(delta))
     res1 =zero(eltype(delta))
     x0 = zero(eltype(x))
-    
+
     for kk in findall(!iszero, model.Aij_indices) # i are CartesianIndices
         i0 = model.Aij_indices[kk]
         i1 = kk[1]
@@ -617,25 +617,37 @@ function _fr2(model::GERG2008,delta,tau,x)
             (delta^model.dijk[i0][j])*
             (tau^model.tijk[i0][j])
         end
-    
+
         for j=(model.k_pol_ijk[i0]+1):(model.k_pol_ijk[i0]+model.k_exp_ijk[i0])
-            
-        
+
+
             idx = j-model.k_pol_ijk[i0]
-            
+
             res1 +=model.nijk[i0][j]*
             (delta^model.dijk[i0][j])*
             (tau^model.tijk[i0][j])*
-            exp(-model.etaijk[i0][idx]*(delta-model.epsijk[i0][idx])^2 -
+           exp(-model.etaijk[i0][idx]*(delta-model.epsijk[i0][idx])^2 -
             model.betaijk[i0][idx]*(delta-model.gammaijk[i0][idx]))
-        end   
+        end
         res+=res1*x[i1]*x[i2]*model.fij[i0]
     end
 end
 return res
 end
 
+function ideal_helmholtz(model::GERG2008,v,T,x)
+    rho = 1.0e-3/v
+    R= Unitful.ustrip(Unitful.R)
+    return R*T*_f0(model,rho,T,x)
+end
 
+function residual_helmholtz(model::GERG2008,v,T,x)
+    rho = 1.0e-3/v
+    R= Unitful.ustrip(Unitful.R)
+    delta = _delta(model,rho,T,x)
+    tau = _tau(model,rho,T,x)
+    return R*T*(_fr1(model,delta,tau,x)+_fr2(model,delta,tau,x))
+end
 
 function core_helmholtz(model::GERG2008,v,T,x)
     rho = 1.0e-3/v
@@ -645,3 +657,31 @@ function core_helmholtz(model::GERG2008,v,T,x)
     return R*T*(_f0(model,rho,T,x)+_fr1(model,delta,tau,x)+_fr2(model,delta,tau,x))
 end
 
+
+
+
+
+#an interface to stract properties stored in the model, the minimum are:
+#molecular weight (for the transformations mass/molar)
+#critical temperature, pressure(for the transformations mass/molar)
+
+###important! you can use whatever you want over the design of the model, but those functions
+##interact with the rest of the model, so the have to be in SI units
+
+compounds_number(model::GERG2008)=model.N
+criticalDensity(model::GERG2008)=1000.0 .* model.criticalDensity
+molecularWeight(model::GERG2008) = model.molecularWeight
+criticalTemperature(model::GERG2008) = model.criticalTemperature
+criticalVolume(model::GERG2008) = 1 ./criticalDensity(model)
+
+#the function random_volume have to be implemented for stocastic solvers
+min_volume(model::GERG2008,P0,T0,x0) = 0.2503*sum(criticalVolume(model) .*x0)
+max_volume(model::GERG2008,P0,T0,x0) = 2*Unitful.ustrip(Unitful.R)*T0/P0
+
+
+function random_volume(model::GERG2008,P0,T0,x0)
+    min_v = min_volume(model,P0,T0,x0)
+    max_v = max_volume(model,P0,T0,x0)
+
+    return min_v + (max_v-min_v)*rand()
+end

@@ -4,8 +4,11 @@ include("utils.jl")
 abstract type AbstractThermoModel end #base model
 abstract type AbstractHelmholtzModel <:  AbstractThermoModel end
 abstract type  AbstractGibbsModel <:  AbstractThermoModel end
-abstract type  AbstractActivityModel <:  AbstractThermoModel end   
+abstract type  AbstractActivityModel <:  AbstractThermoModel end
 abstract type AbstractMixingRule end # for mixing rules
+abstract type AbstractPhase end #for solvers
+
+
 
 
 """
@@ -21,9 +24,82 @@ x:molar fraction, adimensional
 function core_helmholtz(model::M,V,T,x) where M <:AbstractHelmholtzModel
 end
 
-function helmholtz(model::AbstractHelmholtzModel,v,T,x)
-    (v2,T2) = _transformVT(v,T,model.molecularWeight,x)
-    return core_helmholtz(model,v2,T2,x)*1.0u"J/mol"
+function compounds_number(model::AbstractHelmholtzModel,x)
+    return min(compounds_number(model),count(z->z!=0.0,x))
+end
+
+
+#helmholtz but in total units (volume in m3, n in mol)
+function _rhelmholtzn(model::AbstractHelmholtzModel,V,T,n)
+    sum_n = sum(n)
+    x = n./sum_n
+    v = V/sum_n #this operation seems simple but it propagates the derivative of molar numbers,
+    #since core_helmholtz is defined in the sense of molar fractions
+    #with that in mind, the chemical potential of a mixture is n*gradient(_helmholtzn) in n
+    return sum_n*residual_helmholtz(model,v,T,x)
+end
+
+function _ihelmholtzn(model::AbstractHelmholtzModel,V,T,n)
+    sum_n = sum(n)
+    x = n./sum_n
+    v = V/sum_n #this operation seems simple but it propagates the derivative of molar numbers,
+    #since core_helmholtz is defined in the sense of molar fractions
+    #with that in mind, the chemical potential of a mixture is n*gradient(_helmholtzn) in n
+    return sum_n*ideal_helmholtz(model,v,T,x)
+end
+
+function _helmholtzn(model::AbstractHelmholtzModel,V,T,n)
+    sum_n = sum(n)
+    x = n./sum_n
+    v = V/sum_n #this operation seems simple but it propagates the derivative of molar numbers,
+    #since core_helmholtz is defined in the sense of molar fractions
+    #with that in mind, the chemical potential of a mixture is n*gradient(_helmholtzn) in n
+    return sum_n*core_helmholtz(model,v,T,x)
+end
+
+
+#this has the neat property: core_helmholtz(model,v,T,x)= -PV - sum(Ni*μi)
+function _chemical_potential(model::AbstractHelmholtzModel,v,T,x)
+f = z-> _helmholtzn(model,v,T,z)
+return ForwardDiff.gradient(f,x)
+end
+
+function _rchemical_potential(model::AbstractHelmholtzModel,v,T,x)
+f = z-> _rhelmholtzn(model,v,T,z)
+return ForwardDiff.gradient(f,x)
+end
+
+function _ichemical_potential(model::AbstractHelmholtzModel,v,T,x)
+f = z-> _ihelmholtzn(model,v,T,z)
+return ForwardDiff.gradient(f,x)
+end
+
+#
+function _fugacity(model::AbstractHelmholtzModel,v,T,x)
+f = _rchemical_potential(model,v,T,x)
+RT = Unitful.ustrip(Unitful.R)*T
+fzero = zero(eltype(f))
+
+for i =1:length(f)
+    if iszero(x[i])
+        f[i]=fzero
+    else
+        f[i]=(x[i]*RT/v)*exp(f[i]/RT)
+    end
+end
+    return f
+end
+
+function _ln_fugacity_coefficient(model::AbstractHelmholtzModel,v,T,x)
+f = _rchemical_potential(model,v,T,x)
+RT = Unitful.ustrip(Unitful.R)*T
+fzero = zero(eltype(f))
+lnZ = log(_pressure(model,v,T,x)*v/RT)
+for i =1:length(f)
+        f[i] /=RT
+        f[i] -= lnZ
+end
+    return f
 end
 
 
@@ -34,22 +110,34 @@ end
 
 
 
-function _gradientvt(model::AbstractHelmholtzModel,v,T,x) 
-    d = [v T]
-    f(d) = core_helmholtz(model,d[1],d[2],x)
+function _gradientvt(model::AbstractHelmholtzModel,v,T,x)
+    d = [v,T]
+    f = z-> core_helmholtz(model,z[1],z[2],x)
     return ForwardDiff.gradient(f,d)
 end
 
-function _gradientvt2(model::AbstractHelmholtzModel,v,T,x) 
-    vt = [v T]
+function _gradientx(model::AbstractHelmholtzModel,v,T,x)
+    f = z-> core_helmholtz(model,v,T,z)
+    return ForwardDiff.gradient(f,x)
+end
+
+
+function _gradientx2(model::AbstractHelmholtzModel,v,T,x)
+    df = DiffResults.GradientResult(x)
+    df = ForwardDiff.gradient!(df,z->core_helmholtz(model,v,T,z),x)
+    return (DiffResults.value(df),DiffResults.gradient(df))
+end
+
+function _gradientvt2(model::AbstractHelmholtzModel,v,T,x)
+    vt = [v,T]
     df = DiffResults.GradientResult(vt)
     df = ForwardDiff.gradient!(df,z->core_helmholtz(model,z[1],z[2],x),vt)
     return (DiffResults.value(df),DiffResults.gradient(df))
 end
 
 function _dfdv(model::AbstractHelmholtzModel,v,T,x)
-    return ForwardDiff.derivative(
-        z->core_helmholtz(model,z,T,x),v)
+    return ForwardDiff.gradient(
+        z->core_helmholtz(model,z[1],T,x),[v])[1]
 end
 
 function _dfdt(model::AbstractHelmholtzModel,v,T,x)
@@ -58,8 +146,8 @@ function _dfdt(model::AbstractHelmholtzModel,v,T,x)
 end
 
 function _hessianvt(model::AbstractHelmholtzModel,v,T,x)
-    f(d) = core_helmholtz(model,d[1],d[2],x)
-    return ForwardDiff.hessian(f,[v T])
+    f = z->core_helmholtz(model,z[1],z[2],x)
+    return ForwardDiff.hessian(f,[v,T])
 end
 
 function _hessianvt2(model::AbstractHelmholtzModel,v,T,x)
@@ -72,8 +160,6 @@ function _hessianvt2(model::AbstractHelmholtzModel,v,T,x)
     DiffResults.hessian(df))
 end
 
-
-
 struct HelmholtzResultData
     value::Array{Float64,1}
     diffresult::DiffResults.DiffResult
@@ -82,7 +168,7 @@ end
 function _diffdata(model::AbstractHelmholtzModel ,V,T,x,order::Int64 = 2)
     d =  vcat(V,T,x[:])
     #f(d) = core_helmholtz(model,d[1],d[2],d[3:end])
-    f(d) = core_helmholtz(model,d[1],d[2],d[3:end])
+    f = z->  core_helmholtz(model,z[1],z[2],z[3:end])
     res = DiffResults.HessianResult(d)
     if order == 0
     elseif order == 1
@@ -112,31 +198,29 @@ _hessianvt(df::HelmholtzResultData)  = DiffResults.hessian(df.diffresult)[1:2,1:
 #
 #Pressure, a single derivative is faster
 #
-function _pressure_impl(model::AbstractHelmholtzModel,v,T,x)
-    return -_dfdv(model,v,T,x)
-return 
+function _pressure(model::AbstractHelmholtzModel,v,T,x)
+    return -_gradientvt(model,v,T,x)[1]
+return
 end
 
-function _pressure(df::HelmholtzResultData)
-    return -_gradientvt(df)[1]
-return 
-end
 
-function pressure(model::AbstractHelmholtzModel,v,T,x) 
+
+
+function pressure(model::AbstractHelmholtzModel,v,T,x)
     (v2,T2) = _transformVT(v,T,model.molecularWeight,x)
-    return _pressure_impl(model,v2,T2,x)*1.0u"Pa"
+    return _pressure(model,v2,T2,x)*1.0u"Pa"
 end
 
-function pressure(df::HelmholtzResultData) 
+function pressure(df::HelmholtzResultData)
     return _pressure(df)*1.0u"Pa"
 end
 
-function compressibility_factor(model::AbstractHelmholtzModel,v,T,x) 
+function compressibility_factor(model::AbstractHelmholtzModel,v,T,x)
     (v2,T2) = _transformVT(v,T,model.molecularWeight,x)
-    return _pressure_impl(model,v2,T2,x)*v2/(ustrip(Unitful.R)*T2)
+    return _pressure(model,v2,T2,x)*v2/(ustrip(Unitful.R)*T2)
 end
 
-function compressibility_factor(df::HelmholtzResultData) 
+function compressibility_factor(df::HelmholtzResultData)
     (v,T)=_valuevt(df)
     P= _pressure(df)
     return P*v/(Unitful.ustrip(Unitful.R)*T)
@@ -148,27 +232,31 @@ end
 #
 
 function _entropy(model::AbstractHelmholtzModel,v,T,x)
-    return -_dfdt(model,v,T,x)
+    return -_gradientvt(model,v,T,x)[2]
 end
 
 function _entropy(df::HelmholtzResultData)
     return -_gradientvt(df)[2]
 end
 
-function entropy(model::AbstractHelmholtzModel,v,T,x) 
+function entropy(model::AbstractHelmholtzModel,v,T,x)
     (v2,T2) = _transformVT(v,T,model.molecularWeight,x)
     return _entropy(model,v2,T2,x)*1.0u"J/mol/K"
 end
+
+"""
 
 function entropy(df::HelmholtzResultData)
     return _entropy(df)*1.0u"J/mol/K"
 end
 
+"""
+
 #
 #enthalpy
 #
 function _enthalpy(model::AbstractHelmholtzModel,v,T,x)
-    (f,df) = _gradientvt2(m,v,T,x)
+    (f,df) = _gradientvt2(model,v,T,x)
     return f - df[1]*v-df[2]*T
 end
 
@@ -182,7 +270,7 @@ function _enthalpy(df::HelmholtzResultData)
 end
 
 
-function enthalpy(model::AbstractHelmholtzModel,v,T,x) 
+function enthalpy(model::AbstractHelmholtzModel,v,T,x)
     (v2,T2) = _transformVT(v,T,model.molecularWeight,x)
     return _enthalpy(model,v2,T2,x)*1.0u"J/mol"
 end
@@ -213,12 +301,12 @@ function _internal_energy(df::HelmholtzResultData)
     return a-v*da[2]
 end
 
-function internal_energy(model::AbstractHelmholtzModel,v,T,x) 
+function internal_energy(model::AbstractHelmholtzModel,v,T,x)
     (v2,T2) = _transformVT(v,T,model.molecularWeight,x)
     return _internal_energy2(model,v2,T2,x)*1.0u"J/mol"
 end
 
-function internal_energy(df::HelmholtzResultData) 
+function internal_energy(df::HelmholtzResultData)
     return _internal_energy(df)*1.0u"J/mol"
 end
 
@@ -235,8 +323,10 @@ function _isochoric_heat_capacity(df::HelmholtzResultData)
     (v,T)= _valuevt(df)
     d2f = _hessianvt(df)
     return  -T*d2f[2,2]
-    
+
 end
+
+
 
 function isochoric_heat_capacity(model::AbstractHelmholtzModel,v,T,x)
     (v2,T2)=_transformVT(v,T,model.molecularWeight,x)
@@ -251,13 +341,13 @@ end
 ##########
 function _isobaric_heat_capacity(model::AbstractHelmholtzModel,v,T,x)
     d2f = _hessianvt(model,v,T,x)
-    return  -v*d2f[1,2]-T*d2f[2,2]  
+    return  -v*d2f[1,2]-T*d2f[2,2]
 end
 
 function _isobaric_heat_capacity(df::HelmholtzResultData)
     (v,T)=_valuevt(df)
     d2f = _hessianvt(df)
-    return  -v*d2f[1,2]-T*d2f[2,2]   
+    return  -v*d2f[1,2]-T*d2f[2,2]
 end
 
 function isobaric_heat_capacity(model::AbstractHelmholtzModel,v,T,x)
@@ -271,15 +361,19 @@ end
 #######
 # Speed of sound, testing
 #######
+
+
 function _sound_speed(model::AbstractHelmholtzModel,v,T,x)
     d2f = _hessianvt(model,v,T,x)
-    return  v*sqrt(d2f[1,1]) 
+    return  v*sqrt(d2f[1,1]*(1.0+(v*d2f[1,2])/(T*d2f[2,2]))/(LinearAlgebra.dot(x,0.001*model.molecularWeight)))
 end
 
 function sound_speed(model::AbstractHelmholtzModel,v,T,x)
     (v2,T2)=_transformVT(v,T,model.molecularWeight,x)
+    #println((model.molecularWeight,v2))
     return     _sound_speed(model,v2,T2,x)*1.0u"m/s"
 end
+
 
 
 
@@ -298,7 +392,7 @@ struct PowerMeanRule{T} <: AbstractMixingRule where T<:Real
 n::T
 end #look at op_exponent below
 #
-#Abstract mixing rule, generates a mixing rule,based on 
+#Abstract mixing rule, generates a mixing rule,based on
 # an operation, so mij = xi*xj*op(pi,pj)
 #
 function mixing_rule(op,x,p)
@@ -316,7 +410,7 @@ function mixing_rule(op,x,p)
     return res1
 end
 #
-#Abstract mixing rule, generates a mixing rule,based on 
+#Abstract mixing rule, generates a mixing rule,based on
 # an operation, so mij = xi*xj*op(pi,pj)*Aij
 #example: mixing_rule(geometric_mean_rule,x,Tc,1.-K)
 #
@@ -336,7 +430,7 @@ function mixing_rule(op,x,p,A)
     return res1
 end
 #
-#Abstract asymetric mixing rule 
+#Abstract asymetric mixing rule
 #Adds a Asymetric matrix A_asym, and a op_sim(xi,xj,Aij)
 #the mayor example is the GERG2008 equation, where
 #op_asym(xi,xj,Aij) = (xi+xj)/(Aij^2*xi + xj)
@@ -348,7 +442,7 @@ function mixing_rule_asymetric(op,op_asym,x,p,A,A_asym)
     @boundscheck checkbounds(p,N)
     @inbounds begin
         res1 = zero(eltype(x))
-        
+
         for i = 1 : N
             x[i] !=0 && begin
             res1 += p[i] * x[i]^2
@@ -413,9 +507,3 @@ function mixing_matrix!(op,A,p)
     return A
 
 end
-
-
-
-
-
-
