@@ -26,6 +26,7 @@ struct GERG2008 <: AbstractHelmholtzModel
     molecularWeight::Array{Float64,1}
     criticalDensity::Array{Float64,1}
     criticalTemperature::Array{Float64,1}
+    criticalPressure::Array{Float64,1}
     ideal_iters::Array{Array{Int64,1},1}
     nr::Array{Float64,2}
     zeta::Array{Float64,2}
@@ -61,7 +62,9 @@ struct GERG2008 <: AbstractHelmholtzModel
         criticalDensity =[10.139342719,11.1839,10.624978698,6.87085454,5.000043088,3.86014294,
         3.920016792,3.271,3.215577588,2.705877875,2.315324434,2.056404127,1.81,
         1.64,14.94,13.63,10.85,17.87371609,10.19,17.399,13.407429659] #molar density, in mol/dm3
-
+        criticalPressure=[4599000,3400000,7383000,4872000,4248000,3796000,3640000,
+        3370000,3380000,3025000,2740000,2490000,2290000,2110000,1313000,5043000,
+        3499000,22064000,8962910,117000,4898000]#critical pressure, Pa
         #iterations for the ideal part, for now i can´t design a general function
         #with alternating indices like in this form.
         iter_ideal = [4, 3, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 4, 2, 2, 3, 2, 0, 0]
@@ -322,7 +325,7 @@ struct GERG2008 <: AbstractHelmholtzModel
 
         Aij_indices = SparseArrays.spzeros(Int64,21,21)
 
-        for i = 1:length(value_eq)
+        for i in 1:length(value_eq)
            Aij_indices[indice1[i],indice2[i]] = value_eq[i]
         end
 
@@ -469,7 +472,7 @@ struct GERG2008 <: AbstractHelmholtzModel
             k_exp_ijk[i] = length(etaijk[i])
             k_pol_ijk[i] = length(dijk[i]) - k_exp_ijk[i]
         end
-        return new(N,molecularWeight[xsel],criticalDensity[xsel],criticalTemperature[xsel],
+        return new(N,molecularWeight[xsel],criticalDensity[xsel],criticalTemperature[xsel],criticalPressure[xsel],
         ideal_iters,nr[:,xsel],zeta[:,xsel],n0ik[xsel],t0ik[xsel],d0ik[xsel],c0ik[xsel],
         k_pol_ik[xsel],k_exp_ik[xsel],gamma_v[xsel,xsel],gamma_T[xsel,xsel],beta_v[xsel,xsel],beta_T[xsel,xsel],
         Aij_indices[xsel,xsel],fij,dijk,tijk,nijk,etaijk,epsijk,betaijk,gammaijk, k_pol_ijk,k_exp_ijk)
@@ -481,11 +484,12 @@ function _f0(model::GERG2008,rho,T,x)
 
 
     RR = 8.314472/8.314510
-    res = zero(eltype(rho))
-    x0 = zero(eltype(x))  #for comparison
-    ao1 =zero(eltype(T))
-    ao2 =zero(eltype(T))
-    ao_zero =zero(eltype(T))
+    common_type = promote_type(typeof(rho),typeof(T),eltype(x))
+    res = zero(common_type)
+    x0 = zero(common_type)  #for comparison
+    ao1 =zero(common_type)
+    ao2 =zero(common_type)
+    ao_zero =zero(common_type)
 
 
     for i in model.ideal_iters[1]
@@ -497,7 +501,7 @@ function _f0(model::GERG2008,rho,T,x)
         ao1 =  model.nr[1,i]+ model.nr[2,i]*tau + model.nr[3,i]*log(tau)
         ao2 = model.nr[4,i]*log(abs(sinh(model.zeta[1,i]*tau))) - model.nr[5,i]*log(cosh(model.zeta[2,i]*tau))+
         model.nr[6,i]*log(abs(sinh(model.zeta[3,i]*tau))) - model.nr[7,i]*log(cosh(model.zeta[4,i]*tau))
-        ao3 = log(delta)
+        ao3 = log(delta) 
         a0 = RR*(ao1+ao2)+ao3
         res +=x[i]*(a0+log(x[i]))
     end
@@ -571,21 +575,22 @@ end
 
 
 function _fr1(model::GERG2008,delta,tau,x)
-res =zero(eltype(delta))
-res0 =zero(eltype(delta))
-res1 =zero(eltype(delta))
-x0 = zero(eltype(x))
+common_type = promote_type(typeof(delta),typeof(tau),eltype(x))
+res =zero(common_type)
+res0 =zero(common_type)
+res1 =zero(common_type)
+x0 = zero(common_type)
 
 for i = 1:model.N
     x[i]!=x0 && begin
         res1=res0
-        for k = 1:model.k_pol_ik[i]
+        for k in 1:model.k_pol_ik[i]
             res1+=model.n0ik[i][k]*
                 (delta^model.d0ik[i][k])*
                 (tau^model.t0ik[i][k])
         end
 
-        for k = (model.k_pol_ik[i]+1):(model.k_exp_ik[i]+model.k_pol_ik[i])
+        for k in (model.k_pol_ik[i]+1):(model.k_exp_ik[i]+model.k_pol_ik[i])
 
             res1+=model.n0ik[i][k]*
                 (delta^model.d0ik[i][k])*
@@ -601,10 +606,11 @@ return res
 end
 
 function _fr2(model::GERG2008,delta,tau,x)
-    res =zero(eltype(delta))
-    res0 =zero(eltype(delta))
-    res1 =zero(eltype(delta))
-    x0 = zero(eltype(x))
+    common_type = promote_type(typeof(delta),typeof(tau),eltype(x))
+    res =zero(common_type)
+    res0 =zero(common_type)
+    res1 =zero(common_type)
+    x0 = zero(common_type)
 
     for kk in findall(!iszero, model.Aij_indices) # i are CartesianIndices
         i0 = model.Aij_indices[kk]
@@ -618,7 +624,7 @@ function _fr2(model::GERG2008,delta,tau,x)
             (tau^model.tijk[i0][j])
         end
 
-        for j=(model.k_pol_ijk[i0]+1):(model.k_pol_ijk[i0]+model.k_exp_ijk[i0])
+        for j in (model.k_pol_ijk[i0]+1):(model.k_pol_ijk[i0]+model.k_exp_ijk[i0])
 
 
             idx = j-model.k_pol_ijk[i0]
@@ -632,7 +638,7 @@ function _fr2(model::GERG2008,delta,tau,x)
         res+=res1*x[i1]*x[i2]*model.fij[i0]
     end
 end
-return res
+return res 
 end
 
 function ideal_helmholtz(model::GERG2008,v,T,x)
@@ -670,18 +676,8 @@ end
 
 compounds_number(model::GERG2008)=model.N
 criticalDensity(model::GERG2008)=1000.0 .* model.criticalDensity
-molecularWeight(model::GERG2008) = model.molecularWeight
+molecular_weight(model::GERG2008) = model.molecularWeight
 criticalTemperature(model::GERG2008) = model.criticalTemperature
 criticalVolume(model::GERG2008) = 1 ./criticalDensity(model)
+covolumes(model::GERG2008) = 0.0778*model.criticalTemperature*Unitful.ustrip(Unitful.R) ./ model.criticalPressure
 
-#the function random_volume have to be implemented for stocastic solvers
-min_volume(model::GERG2008,P0,T0,x0) = 0.2503*sum(criticalVolume(model) .*x0)
-max_volume(model::GERG2008,P0,T0,x0) = 2*Unitful.ustrip(Unitful.R)*T0/P0
-
-
-function random_volume(model::GERG2008,P0,T0,x0)
-    min_v = min_volume(model,P0,T0,x0)
-    max_v = max_volume(model,P0,T0,x0)
-
-    return min_v + (max_v-min_v)*rand()
-end

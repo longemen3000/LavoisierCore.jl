@@ -33,21 +33,7 @@ function weight_to_molar(value,x,MW)
 end
 
 
-function normalizefrac!(x)
-    summ = sum(x)
-    for i = 1:length(x)
-        x[i] /=summ
-    end
-end
 
-function normalizefrac(x)
-    summ = sum(x)
-    y = copy(x)
-    for i = 1:length(x)
-        y[i] /=summ
-    end
-    return y
-end
         
 ##DIPPR search utils
 
@@ -122,4 +108,43 @@ function _transformVT(V,T,mw,x)
     return (_transform_v(V,mw,x),_transform_T(T))
 end
 
+###
+### fraction utilities
+###
+function normalizefrac!(x)
+    summ = sum(x)
+    for i = 1:length(x)
+        x[i] /=summ
+    end
+end
 
+function normalizefrac(x)
+    summ = sum(x)
+    y = copy(x)
+    for i = 1:length(x)
+        y[i] /=summ
+    end
+    return y
+end
+function randfrac(N::Integer)
+    x = rand(N)
+    return x ./sum(x)
+end
+function randfrac(x0::Array)
+    length(x0)>0 && begin
+    x = similar(x0)
+    zerox = 0.0
+    for i = 1:length(x0)
+     x[i]=ifelse(x0[i]==zerox,zerox,rand())
+    end
+    x /= sum(x)
+    return x 
+end
+end
+
+function randpurefrac(x0::Array)
+    x = zeros(length(x0))
+    i = rand(LinearIndices(findall(x->x!=0.0,x0)))
+    x[i] = 1.0
+    return x
+end

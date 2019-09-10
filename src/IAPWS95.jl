@@ -101,7 +101,7 @@ function _fr(model::IAPWS95,rho,T)
     delta = rho/322
     tau = 647.096/T
    
-    res=0
+    res=zero(promote_type(typeof(rho),typeof(T)))
     for i = 1:7
         res=res+(model.nr1[i]*delta^(model.d1[i])) * (tau^model.t1[i])
     end
@@ -128,7 +128,7 @@ end
 
 @inline _f(model::IAPWS95,rho,T) = _fr(model,rho,T)+_f0(model,rho,T)
 
-function core_helmholtz(model::IAPWS95,v::R1,T::R2,x::Array{R3,1}=[1.0]) where R1 <:Real where R2 <:Real where R3 <:Real
+function core_helmholtz(model::IAPWS95,v,T,x=[1.0]) 
    #R value calculated from molecular weight and specific gas constant
     #return 8.3143713575874*T*_f(model, molar_to_weight(1/v,[model.molecularWeight],[1.0]),T)
     #println(molar_to_weight(1/v,[model.molecularWeight],[1.0]))
@@ -158,14 +158,7 @@ function _rholsatexp(T) #Saturated liquid density equation, eq 2.6, #SI units
     return 322*(1.0+b[1]*d^(1.0/3.0)+b[2]*d^(2.0/3.0)+b[3]*d^(5.0/3.0)+b[4]*d^(16.0/3.0)+b[5]*d^(43.0/3.0)+b[6]*d^(110.0/3.0))
 end
 
-criticalDensity(model::IAPWS95)=[17873.72799560906] #mol/m3
-molecularWeight(model::IAPWS95) = [18.015268] #MW
-criticalTemperature(model::IAPWS95) = [647.096] #kelvin
-criticalVolume(model::IAPWS95) = 1 ./criticalDensity(model) #m3/mol
 
-#random volume, function used at stocastic equilibrium
-function random_volume(model::IAPWS95,P0,T0,x0)
-    min_v = 1.0/(1000*1000/18.015268) #1000 kg/m3, density of water at 4°C
-    max_v = Unitful.ustrip(Unitful.R)*T0/P0
-    return min_v + 2*(max_v-min_v)*rand() 
-end
+molecular_weight(model::IAPWS95) = model.molecularWeight #MW
+compounds_number(model::IAPWS95)= 1
+covolumes(model::IAPWS95) =[1.9900804839131538e-5] #copied from covolumes(GERG2008)

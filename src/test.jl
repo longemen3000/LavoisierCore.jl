@@ -2,10 +2,14 @@
 include("core.jl")
 include("IAPWS95.jl")
 include("gerg2008.jl")
-include("held.jl")
+include("solver4.jl")
 
 using BenchmarkTools
-
+minigerg = GERG2008([19,1]) #H2S + Ch4
+P0 = 4.53e6
+T0 = 190
+x0 = [0.05,0.95]
+v0 = 5.690353439153631e-5
 #m = IAPWS95()
 #gerg = GERG2008()
 #rho0 = 838.025
