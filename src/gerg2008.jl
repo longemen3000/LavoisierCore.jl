@@ -1,5 +1,5 @@
 include("core.jl")
-using SparseArrays
+using SparseArrays, MappedArrays
 #creates the beta_v and beta_T from the vector specified
 function gerg_betamatrix_from_vector(v,symmetric_op = (a)->a)
     N1 = length(v)
@@ -23,34 +23,34 @@ end
 
 struct GERG2008 <: AbstractHelmholtzModel
     N::Int64
-    molecularWeight::Array{Float64,1}
-    criticalDensity::Array{Float64,1}
-    criticalTemperature::Array{Float64,1}
-    criticalPressure::Array{Float64,1}
-    ideal_iters::Array{Array{Int64,1},1}
-    nr::Array{Float64,2}
-    zeta::Array{Float64,2}
-    n0ik::Array{Array{Float64,1},1}
-    t0ik::Array{Array{Float64,1},1}
-    d0ik::Array{Array{Float64,1},1}
-    c0ik::Array{Array{Float64,1},1}
-    k_pol_ik::Array{Int64,1}
-    k_exp_ik::Array{Int64,1}
-    gamma_v::Array{Float64,2}
-    gamma_T::Array{Float64,2}
-    beta_v::Array{Float64,2}
-    beta_T::Array{Float64,2}
-    Aij_indices::SparseArrays.SparseMatrixCSC{Int64,Int64}
-    fij::Array{Float64,1}
-    dijk::Array{Array{Float64,1},1}
-    tijk::Array{Array{Float64,1},1}
-    nijk::Array{Array{Float64,1},1}
-    etaijk::Array{Array{Float64,1},1}
-    epsijk::Array{Array{Float64,1},1}
-    betaijk::Array{Array{Float64,1},1}
-    gammaijk::Array{Array{Float64,1},1}
-    k_pol_ijk::Array{Int64,1}
-    k_exp_ijk::Array{Int64,1}
+    molecularWeight::Vector{Float64}
+    criticalDensity::Vector{Float64}
+    criticalTemperature::Vector{Float64}
+    criticalPressure::Vector{Float64}
+    ideal_iters::Vector{Vector{Int64}}
+    nr::Matrix{Float64}
+    zeta::Matrix{Float64}
+    n0ik::Vector{Vector{Float64}}
+    t0ik::Vector{Vector{Float64}}
+    d0ik::Vector{Vector{Float64}}
+    c0ik::Vector{Vector{Float64}}
+    k_pol_ik::Vector{Int64}
+    k_exp_ik::Vector{Int64}
+    gamma_v::Matrix{Float64}
+    gamma_T::Matrix{Float64}
+    beta_v::Matrix{Float64}
+    beta_T::Matrix{Float64}
+    Aij_indices::Matrix{Int64}
+    fij::Vector{Float64}
+    dijk::Vector{Vector{Float64}}
+    tijk::Vector{Vector{Float64}}
+    nijk::Vector{Vector{Float64}}
+    etaijk::Vector{Vector{Float64}}
+    epsijk::Vector{Vector{Float64}}
+    betaijk::Vector{Vector{Float64}}
+    gammaijk::Vector{Vector{Float64}}
+    k_pol_ijk::Vector{Int64}
+    k_exp_ijk::Vector{Int64}
     function GERG2008(xsel = collect(1:21))
 
         N=length(xsel)
@@ -321,13 +321,14 @@ struct GERG2008 <: AbstractHelmholtzModel
 
         indice1 = [1,1,1,1,1,1,1,2,2,4,4,4,5,5,6]
         indice2 = [2,3,4,5,6,7,15,3,4,5,6,7,6,7,7]
-        value_eq = 1:length(indice1)
+        indice3 = 1:length(indice1)
+        unique_indices = intersect([1,2,3,4,5,6,15],xsel)
 
-        Aij_indices = SparseArrays.spzeros(Int64,21,21)
-
-        for i in 1:length(value_eq)
-           Aij_indices[indice1[i],indice2[i]] = value_eq[i]
+        Aij_indices = hcat(indice1[unique_indices],indice2[unique_indices],indice3[unique_indices])
+        for i = 1:15 #hardcoded
         end
+
+    
 
         fij=[1.0,1.0,1.0,1.0,1.0,0.771035405688,1.0,1.0,1.0,0.130424765150,0.281570073085,0.260632376098,
         0.312572600489e-1,-0.551609771024e-1,-0.551240293009e-1]
@@ -466,8 +467,8 @@ struct GERG2008 <: AbstractHelmholtzModel
 
 
         length_k_ijk = length(dijk)
-        k_pol_ijk = Array{Int64,1}(undef,length_k_ijk)
-        k_exp_ijk = Array{Int64,1}(undef,length_k_ijk)
+        k_pol_ijk = Vector{Int64}(undef,length_k_ijk)
+        k_exp_ijk = Vector{Int64}(undef,length_k_ijk)
         for i = 1:length_k_ijk
             k_exp_ijk[i] = length(etaijk[i])
             k_pol_ijk[i] = length(dijk[i]) - k_exp_ijk[i]
@@ -475,12 +476,12 @@ struct GERG2008 <: AbstractHelmholtzModel
         return new(N,molecularWeight[xsel],criticalDensity[xsel],criticalTemperature[xsel],criticalPressure[xsel],
         ideal_iters,nr[:,xsel],zeta[:,xsel],n0ik[xsel],t0ik[xsel],d0ik[xsel],c0ik[xsel],
         k_pol_ik[xsel],k_exp_ik[xsel],gamma_v[xsel,xsel],gamma_T[xsel,xsel],beta_v[xsel,xsel],beta_T[xsel,xsel],
-        Aij_indices[xsel,xsel],fij,dijk,tijk,nijk,etaijk,epsijk,betaijk,gammaijk, k_pol_ijk,k_exp_ijk)
+        Aij_indices,fij,dijk,tijk,nijk,etaijk,epsijk,betaijk,gammaijk, k_pol_ijk,k_exp_ijk)
     end
 end
 
 
-function _f0(model::GERG2008,rho,T,x)
+Base.@pure function _f0(model::GERG2008,rho,T,x)
 
 
     RR = 8.314472/8.314510
@@ -557,16 +558,16 @@ function _f0(model::GERG2008,rho,T,x)
         return res
 end
 
-_gerg_asymetric_mix_rule(xi,xj,b)= b*(xi+xj)/(xi*b^2+xj)
+Base.@pure _gerg_asymetric_mix_rule(xi,xj,b)= b*(xi+xj)/(xi*b^2+xj)
 
 
-function _delta(model::GERG2008,rho,T,x)
-    rhor = 1/mixing_rule_asymetric(power_mean_rule(3),_gerg_asymetric_mix_rule,
-    x,  1 ./ model.criticalDensity,model.gamma_v,model.beta_v)
+Base.@pure function _delta(model::GERG2008,rho,T,x)
+    rhor = inv(mixing_rule_asymetric(cubic_mean_rule,_gerg_asymetric_mix_rule,
+    x,  mappedarray(inv,model.criticalDensity) ,model.gamma_v,model.beta_v))
     return rho/rhor
 end
 
-function _tau(model::GERG2008,rho,T,x)
+Base.@pure function _tau(model::GERG2008,rho,T,x)
     Tr = mixing_rule_asymetric(geometric_mean_rule,_gerg_asymetric_mix_rule,
     x,model.criticalTemperature,model.gamma_T,model.beta_T)
     return Tr/T
@@ -574,7 +575,7 @@ end
 
 
 
-function _fr1(model::GERG2008,delta,tau,x)
+Base.@pure function _fr1(model::GERG2008,delta,tau,x)
 common_type = promote_type(typeof(delta),typeof(tau),eltype(x))
 res =zero(common_type)
 res0 =zero(common_type)
@@ -605,37 +606,39 @@ end
 return res
 end
 
-function _fr2(model::GERG2008,delta,tau,x)
+Base.@pure function _fr2(model::GERG2008,delta,tau,x)
     common_type = promote_type(typeof(delta),typeof(tau),eltype(x))
     res =zero(common_type)
     res0 =zero(common_type)
-    res1 =zero(common_type)
     x0 = zero(common_type)
 
-    for kk in findall(!iszero, model.Aij_indices) # i are CartesianIndices
-        i0 = model.Aij_indices[kk]
-        i1 = kk[1]
-        i2 = kk[2]
-        x[i1] != x0 && x[i2] !=x0 && begin
-        res1 = res0
-        for j=1:model.k_pol_ijk[i0]
-            res1 +=model.nijk[i0][j]*
-            (delta^model.dijk[i0][j])*
-            (tau^model.tijk[i0][j])
-        end
+    for kk in 1:size(model.Aij_indices)[1] # i are CartesianIndices
+        
+            i0 = model.Aij_indices[kk,1]
+            i1 = model.Aij_indices[kk,2]
+            i2 = model.Aij_indices[kk,3]
+            
+            x[i1] != x0 && x[i2] !=x0 && begin
+            res1 = res0
+            for j=1:model.k_pol_ijk[i0]
+                res1 +=model.nijk[i0][j]*
+                (delta^model.dijk[i0][j])*
+                (tau^model.tijk[i0][j])
+            end
 
-        for j in (model.k_pol_ijk[i0]+1):(model.k_pol_ijk[i0]+model.k_exp_ijk[i0])
+            for j in (model.k_pol_ijk[i0]+1):(model.k_pol_ijk[i0]+model.k_exp_ijk[i0])
 
 
-            idx = j-model.k_pol_ijk[i0]
+                idx = j-model.k_pol_ijk[i0]
 
-            res1 +=model.nijk[i0][j]*
-            (delta^model.dijk[i0][j])*
-            (tau^model.tijk[i0][j])*
-           exp(-model.etaijk[i0][idx]*(delta-model.epsijk[i0][idx])^2 -
-            model.betaijk[i0][idx]*(delta-model.gammaijk[i0][idx]))
-        end
-        res+=res1*x[i1]*x[i2]*model.fij[i0]
+                res1 +=model.nijk[i0][j]*
+                (delta^model.dijk[i0][j])*
+                (tau^model.tijk[i0][j])*
+            exp(-model.etaijk[i0][idx]*(delta-model.epsijk[i0][idx])^2 -
+                model.betaijk[i0][idx]*(delta-model.gammaijk[i0][idx]))
+            end
+            res+=res1*x[i1]*x[i2]*model.fij[i0]
+        
     end
 end
 return res 
