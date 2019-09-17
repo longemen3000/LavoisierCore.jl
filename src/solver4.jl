@@ -1,4 +1,5 @@
-using NLopt, ForwardDiff, DiffResults, Optim , BlackBoxOptim, Sobol
+using NLopt, ForwardDiff, DiffResults, Optim , Sobol, MappedArrays
+include("ej1.jl")
 #this completely defines a phase in helmholtz energy
 #temperature in Kelvin, molar volume in m3/mol,and the material is in mol number
 struct HelmholtzPhase{T}
@@ -115,7 +116,7 @@ function stvtd(model::AbstractHelmholtzModel,v,T,x0)
         opt_global = Opt(:GN_DIRECT_L, len) #sequencial quadratic programming
         opt_global.lower_bounds = min_c
         opt_global.upper_bounds = max_c
-        opt_global.xtol_rel = 5e-2
+        opt_global.xtol_rel = 5e-5
         opt_global.min_objective = (x,grad) -> nlopt_form(tpd,x,grad,diffresults_cache_st)
         #crand .= clamp.(4 .* c0 .* rand(len) .^ 2,min_c,max_c) #magic random sauce
         next!(s,crand)
@@ -129,7 +130,7 @@ function stvtd(model::AbstractHelmholtzModel,v,T,x0)
     if one_phase 
         return (_helmholtzn(model,v,T,x),helmholtz_phase(model,v,T,x)) # the material is definitely one phase
     end
-    println(crand,new_phase)
+    #println(crand,new_phase)
     βmin = [1e-06]
     βmax = [min(1.0,minimum(c0./new_phase))]
     
@@ -160,23 +161,42 @@ function stvtd(model::AbstractHelmholtzModel,v,T,x0)
     #here ends the stability test and the search of a candidade phase. now we proceed to calculate
     #the real phase split
     equilibrium_phase0 = [new_phase...,minβ[1]]
+    
+    
+    
     function fn_eq(z)
         α = z[end];
         c1 = view(z,1:(length(z)-1))
-        return α*fn(c1) + (1-α)*fn((c0 .- α .* c1) ./ (1-α))
+        fc2(a,b) = (a-α*b)/(1-α)
+        c2 = mappedarray(fc2, c0, c1)
+        return α*fn(c1) + (1-α)*fn(c2)
     end
+    function pressure_equality(z)
+        α = z[end];
+        c1 = view(z,1:(length(z)-1))
+        fc2(a,b) = (a-α*b)/(1-α)
+        c2 = mappedarray(fc2, c0, c1)
+        v11 = inv(sum(c1))
+        v22 = inv(sum(c2))
+        return core_pressure(model,v11,T0,c1 .* v11) -  core_pressure(model,v22,T0,c2 .* v22)
+    end
+    println(min_c,minβ[1])
     min_eq = vcat(min_c,1e-6)
     max_eq = vcat(fill(2.0^256,len),1.0-1e-6)
     diffresults_cache_eq = DiffResults.GradientResult(min_eq)
+    diffresults_cache_eq2 = DiffResults.GradientResult(min_eq)
 
     isoptim = false
     if isoptim == false
-    opt_eq = Opt(:LD_MMA, len+1) #sequencial quadratic programming
+    opt_eq = Opt(:LD_SLSQP, len+1) #sequencial quadratic programming
     opt_eq.lower_bounds = min_eq
     opt_eq.upper_bounds = max_eq
-    opt_eq.xtol_abs = 1e-4
+    opt_eq.xtol_abs = 1e-16
     #println(fn_eq(equilibrium_phase0))
     opt_eq.min_objective = (x,grad) -> nlopt_form(fn_eq2,x,grad,diffresults_cache_eq)
+    equality_constraint!(opt_eq, (x,grad) -> nlopt_form(pressure_equality,x,grad,diffresults_cache_eq2), 1e-8)
+    println(fn_eq(equilibrium_phase0))
+    println(pressure_equality(equilibrium_phase0))
     minf_eq,equilibrium_phase,ret = NLopt.optimize(opt_eq,equilibrium_phase0)
     #println(_helmholtzn(model,equilibrium_phase[end]*v,T,equilibrium_phase[end]*equilibrium_phase[1:end-1]*v)+_helmholtzn(model,(1-equilibrium_phase[end])*v,T,x0.-equilibrium_phase[end]*equilibrium_phase[1:end-1]*v))
     else
@@ -184,8 +204,15 @@ function stvtd(model::AbstractHelmholtzModel,v,T,x0)
     #dfc = TwiceDifferentiableConstraints(min_eq, max_eq)
     #res = Optim.optimize(df, equilibrium_phase0, NewtonTrustRegion())
 
-    bboptimize(fn_eq; SearchRange = ff = [box for box in zip(min_eq,max_eq)])
-    return res
+    #bboptimize(fn_eq; SearchRange = ff = [box for box in zip(min_eq,max_eq)])
+
+    prob = Objective(autodiff2(fn_eq),equilibrium_phase0)
+    alg = MyNewton(zeros(len+1),0)
+    H = zeros(len+1,len+1)
+    g = zeros(len+1)
+    
+    return step!(prob,alg,H,g,x,false)
+
     end
     
     return (minf_eq,equilibrium_phase,ret)
