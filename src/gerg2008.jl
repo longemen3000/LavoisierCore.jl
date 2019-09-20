@@ -493,7 +493,7 @@ end
 
 
 
-Base.@pure function _f0(model::GERG2008,rho,T,x)
+function _f0(model::GERG2008,rho,T,x)
 
 
     RR = 8.314472/8.314510
@@ -565,16 +565,16 @@ Base.@pure function _f0(model::GERG2008,rho,T,x)
         return res
 end
 
-Base.@pure _gerg_asymetric_mix_rule(xi,xj,b)= b*(xi+xj)/(xi*b^2+xj)
+_gerg_asymetric_mix_rule(xi,xj,b)= b*(xi+xj)/(xi*b^2+xj)
 
 
-Base.@pure function _delta(model::GERG2008,rho,T,x)
+function _delta(model::GERG2008,rho,T,x)
     rhor = inv(mixing_rule_asymetric(cubic_mean_rule,_gerg_asymetric_mix_rule,
     x,  mappedarray(inv,model.criticalDensity) ,model.gamma_v,model.beta_v))
     return rho/rhor
 end
 
-Base.@pure function _tau(model::GERG2008,rho,T,x)
+function _tau(model::GERG2008,rho,T,x)
     Tr = mixing_rule_asymetric(geometric_mean_rule,_gerg_asymetric_mix_rule,
     x,model.criticalTemperature,model.gamma_T,model.beta_T)
     return Tr/T
@@ -582,7 +582,7 @@ end
 
 
 
-Base.@pure function _fr1(model::GERG2008,delta,tau,x)
+function _fr1(model::GERG2008,delta,tau,x)
 common_type = promote_type(typeof(delta),typeof(tau),eltype(x))
 res =zero(common_type)
 res0 =zero(common_type)
@@ -613,7 +613,7 @@ end
 return res
 end
 
-Base.@pure function _fr2(model::GERG2008,delta,tau,x)
+function _fr2(model::GERG2008,delta,tau,x)
     common_type = promote_type(typeof(delta),typeof(tau),eltype(x))
     res =zero(common_type)
     res0 =zero(common_type)
@@ -687,5 +687,8 @@ criticalDensity(model::GERG2008)=1000.0 .* model.criticalDensity
 molecular_weight(model::GERG2008) = model.molecularWeight
 criticalTemperature(model::GERG2008) = model.criticalTemperature
 criticalVolume(model::GERG2008) = 1 ./criticalDensity(model)
+
+
+#those functions are necessary
 covolumes(model::GERG2008) = 0.0778*model.criticalTemperature*Unitful.ustrip(Unitful.R) ./ model.criticalPressure
 

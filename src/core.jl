@@ -3,23 +3,11 @@ include("utils.jl")
 
 abstract type AbstractThermoModel end #base model
 abstract type AbstractHelmholtzModel <:  AbstractThermoModel end
-abstract type  AbstractGibbsModel <:  AbstractThermoModel end
-abstract type  AbstractActivityModel <:  AbstractThermoModel end   
 abstract type AbstractMixingRule end # for mixing rules
 abstract type AbstractPhase end #for solvers
-
 abstract type AbstractSpec{T,UNIT} end
 
-struct PressureSpec{T,UNIT} <: AbstractSpec{T,UNIT}
-value::T
-unit::UNIT
-is_manometric::Bool
-end
 
-struct VolumeSpec{T,UNIT} <: AbstractSpec{T,UNIT}
-    value::T
-    unit::UNIT
-end
 
 
 
@@ -39,11 +27,13 @@ x:molar fraction, adimensional
 function core_helmholtz(model::M,V,T,x) where M <:AbstractHelmholtzModel
 end
 
+
 Base.length(model::AbstractHelmholtzModel)=compounds_number(model)
 
 #helmholtz but in total units (volume in m3, n in mol)
 function  _helmholtzn(model::AbstractHelmholtzModel,V,T,n)
     sum_n = moles(mol_number(n))
+    sum_n< zero(sum_n) && return zero(sum_n) 
     x = n*inv(sum_n)
     v = V*inv(sum_n) #this operation seems simple but it propagates the derivative of molar numbers,
     #since core_helmholtz is defined in the sense of molar fractions
@@ -54,6 +44,7 @@ end
 #helmholtz density, energy in a cubic meter, used in VTC equilibrium
 function _helmholtzd(model::AbstractHelmholtzModel,T,C) 
     sum_c = sum(C)
+    sum_c < zero(sum_c) && return zero(sum_c) 
     return sum_c*core_helmholtz(model,inv(sum_c),T,C/sum_c)
 end
 
@@ -193,7 +184,7 @@ end
 #Entropy
 #
 
-function core_entropy(model::AbstractHelmholtzModel,v,T,x)
+function compressibility_factor(model::AbstractHelmholtzModel,v,T,x)
     return -core_grad_vt(model,v,T,x)[2]
 end
 
@@ -414,6 +405,8 @@ arithmetic_mean_rule(a,b)=(a+b)/2
 
 harmonic_mean_rule(a,b)=2*a*b/(a+b)
 
+cubic_mean_rule(a,b)=((a^(1/3) + b^(1/3))/2)^3
+
 _power_mean_rule(a,b,n)=((a^(1/n) + b^(1/n))/2)^n
 
 
@@ -549,6 +542,7 @@ end
 mol_number(model::AbstractHelmholtzModel,x) = mol_number(x)
 mol_number(x,model::AbstractHelmholtzModel) = mol_number(x)
 mol_number(x::MolNumber) = x
+mol_number(model::AbstractHelmholtzModel, x::Union{MolFraction, MolNumber}) = mol_number(x)
 mol_number(x::MolFraction{T})  where T = MolNumber{T}(x.values,x.amount)
 mol_number(x::Union{MolFraction,MolNumber},mw) = mol_number(x)
 mol_number(mw,x::Union{MolFraction,MolNumber}) = mol_number(x)
@@ -596,4 +590,53 @@ mass_number(x::Union{MolFraction,MolNumber}) = throw(ArgumentError("molecular we
 mass_number(x::Union{MolFraction,MolNumber},model::AbstractHelmholtzModel) = mass_number(x,molecular_weight(model))
 mass_number(mw,x::Union{MolFraction,MolNumber})=mass_number(x,mw)
 
+####################################
+#helmholtz phase
+#is used to pass around results in a compact manner,maybe add helmholtz result data here?
+#this completely defines a phase in helmholtz energy (v,T)
+#temperature in Kelvin, molar volume in m3/mol,and the material is in mol number
+struct HelmholtzPhase{T} <: AbstractPhase #this does nothing for now, what functions should implement an abstractPhase? 
+    volume::T
+    temperature::T
+    material::MolNumber{T}
+    molecularWeight::Array{T}
+end
 
+
+function helmholtz_phase(model,v,T,x)
+TT = promote_type(eltype(x),typeof(v),typeof(T))
+v1 = convert(TT,v)
+T1 = convert(TT,T)
+x1 = mol_number(TT.(x))
+mw = TT.(molecular_weight(model))
+return HelmholtzPhase{TT}(v1,T1,x1,mw)
+end
+
+function helmholtz_phase(model,v,T,x::AbstractMaterialVector{_T}) where _T
+    TT = promote_type(_T,typeof(v),typeof(T))
+    v1 = convert(TT,v)
+    T1 = convert(TT,T)
+    x1 = mol_number(model,x)
+    mw = TT.(molecular_weight(model))
+    return HelmholtzPhase{TT}(v1,T1,x1,mw)
+    end
+
+volume(a::HelmholtzPhase) = a.volume
+temperature(a::HelmholtzPhase) = a.temperature
+molecular_weight(a::HelmholtzPhase) = a.molecularWeight
+moles(a::HelmholtzPhase)= moles(a.material)
+mass(a::HelmholtzPhase) = mass(a.material,a.molecularWeight)
+
+mol_fraction(a::HelmholtzPhase) = mol_fraction(a.material)
+mol_number(a::HelmholtzPhase) = mol_number(a.material)
+mass_fraction(a::HelmholtzPhase) = mass_fraction(a.material,molecular_weight(a))
+mass_number(a::HelmholtzPhase) = mass_number(a.material,molecular_weight(a))
+_unpack_helmholtz(a::HelmholtzPhase) = (volume(a),temperature(a),mol_fraction(a))
+
+for op = (:_helmholtzn,    :core_helmholtz,    :core_grad_vt,    :core_grad_x,
+    :core_fg_x,    :core_fg_vt,    :core_dfdv,    :core_dfdt,    :core_hessian_vt,
+    :core_fgh_vt,    :core_pressure,    :compressibility_factor,    :core_entropy,
+    :core_enthalpy,    :core_internal_energy,    :core_isochoric_heat_capacity,
+    :core_isobaric_heat_capacity,    :core_sound_speed)
+    @eval $op(model::AbstractHelmholtzModel,a::HelmholtzPhase) = $op(model,_unpack_helmholtz(a)...)
+end

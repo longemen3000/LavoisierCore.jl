@@ -7,32 +7,38 @@ but you don't want to implement all the properties that would transform your new
 
 
 ## how?
-for example, let's say you want to implement a new saft model:
+for example, let's say you want to implement a new helmholtz model:
 ```
-struct MyShinySAFT <: AbstractThermoModel
-...
+struct MyHelmholtzModel <: AbstractThermoModel
+...#here you store your constants
 ...
 end
 ```
 then you
 
-now, to use the power of this package, you just need to define one thing: your equation, of course. The principal interface to 
-the package is the definition of the function `core_helmholtz(model,v,T,x)`, with v being the molar volume (m3/mol), T being the temperature (Kelvin), and x being the vector of molar fractions.
+the package is the definition of the function `core_helmholtz(model,v,T,x)`, with v being the molar volume (m3/mol), T being the temperature (Kelvin), and x being the vector of molar fractions. the rest is obtained via autommatic differenciation.
 
 ```
-core_helmholtz(model::MyShinySAFT,v,T,x)
+core_helmholtz(model::MyHelmholtzModel,v,T,x)
 ...
 end
 ```
 
 And that's it!, with that, all relevant thermodynamic property's functions will be created, using the power of Julia's multiple dispatch and the powerful tools of automatic differenciation available (ForwardDiff at the moment, a reverse AD tool in the future).
 
-the package in this moment only have the IAPWS 95 formulation of water, and the following properties:
+at this moment, this package has implementations of 
+* IAPWS 95 (formulation of water)
+* GERG 2008 (21 natural gas compounds)
 
+ and the following properties:
+
+* compressibility factor
 * pressure
-* internal_energy
+* internal energy
 * enthalpy
 * entropy
+* isochoric heat capacity
+* isobaric heat capacity
 
 if you defined your helmholtz equation, then you have access to all those functions.
 
@@ -64,7 +70,10 @@ This package is in heavy development, don't dare to even try to use this in prod
 Aspen is expensive, COOLPROP uses C++, and the thermodynamic papers are seldom implemented for free (for example,
 the SAFT equations), and because is fun!, why not?
 
+#News (September 19, 2019)
 
+Added a equilibrium solver in Volume-Temperature-mol, based on a unified representation 
+of helmholtz equilibria. a Pressure-Temperature-mol is following
 
 
 
