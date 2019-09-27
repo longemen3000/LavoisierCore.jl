@@ -1,14 +1,10 @@
-using JuliaDB, ForwardDiff, DiffResults, Unitful, LinearAlgebra, Zygote#master
-include("utils.jl")
-
 abstract type AbstractThermoModel end #base model
 abstract type AbstractHelmholtzModel <:  AbstractThermoModel end
 abstract type AbstractMixingRule end # for mixing rules
 abstract type AbstractPhase end #for solvers
 abstract type AbstractSpec{T,UNIT} end
 
-
-
+Base.broadcastable(x::AbstractHelmholtzModel) = Ref(x)
 
 
 
@@ -44,10 +40,20 @@ end
 #helmholtz density, energy in a cubic meter, used in VTC equilibrium
 function _helmholtzd(model::AbstractHelmholtzModel,T,C) 
     sum_c = sum(C)
-    sum_c < zero(sum_c) && return zero(sum_c) 
+    #sum_c < zero(sum_c) && return zero(sum_c) 
     return sum_c*core_helmholtz(model,inv(sum_c),T,C/sum_c)
 end
 
+#gibbs density, energy in a cubic meter, used in VTC equilibrium
+function _gibbsd(model::AbstractHelmholtzModel,T,C) 
+    sum_c = sum(C)
+    sum_c < zero(sum_c) && return zero(sum_c) 
+    return sum_c*(core_helmholtz(model,inv(sum_c),T,C/sum_c)+core_pressure(model,inv(sum_c),T,C/sum_c))
+end
+
+function core_gibbs(model::AbstractHelmholtzModel,v,T,x)
+    return core_helmholtz(model,v,T,x)+core_pressure(model,v,T,x)*v
+end
 #this has the neat property: core_helmholtz(model,v,T,x)= -PV - sum(Ni*μi)
 function _chemical_potential(model::AbstractHelmholtzModel,v,T,x)
 f = z-> _helmholtzn(model,v,T,z)
@@ -160,7 +166,7 @@ end
 
 
 function pressure(model::AbstractHelmholtzModel,v,T,x) 
-    (v2,T2) = _transformVT(v,T,model.molecularWeight,x)
+    (v2,T2) = _transformVT(v,T,molecular_weight(model),x)
     return core_pressure(model,v2,T2,x)*1.0u"Pa"
 end
 
@@ -169,8 +175,8 @@ function pressure(df::HelmholtzResultData)
 end
 
 function compressibility_factor(model::AbstractHelmholtzModel,v,T,x) 
-    (v2,T2) = _transformVT(v,T,model.molecularWeight,x)
-    return _pressure_impl(model,v2,T2,x)*v2/(ustrip(Unitful.R)*T2)
+    (v2,T2) = _transformVT(v,T,molecular_weight(model),x)
+    return core_pressure(model,v2,T2,x)*v2/(ustrip(Unitful.R)*T2)
 end
 
 function compressibility_factor(df::HelmholtzResultData) 
@@ -183,17 +189,16 @@ end
 #
 #Entropy
 #
-
-function compressibility_factor(model::AbstractHelmholtzModel,v,T,x)
+function core_entropy(model::AbstractHelmholtzModel,v,T,x)
     return -core_grad_vt(model,v,T,x)[2]
+return 
 end
-
 function core_entropy(df::HelmholtzResultData)
     return -core_grad_vt(df)[2]
 end
 
 function entropy(model::AbstractHelmholtzModel,v,T,x) 
-    (v2,T2) = _transformVT(v,T,model.molecularWeight,x)
+    (v2,T2) = _transformVT(v,T,molecular_weight(model),x)
     return core_entropy(model,v2,T2,x)*1.0u"J/mol/K"
 end
 
@@ -220,7 +225,7 @@ end
 
 
 function enthalpy(model::AbstractHelmholtzModel,v,T,x) 
-    (v2,T2) = _transformVT(v,T,model.molecularWeight,x)
+    (v2,T2) = _transformVT(v,T,molecular_weight(model),x)
     return core_enthalpy(model,v2,T2,x)*1.0u"J/mol"
 end
 
@@ -245,7 +250,7 @@ function core_internal_energy(df::HelmholtzResultData)
 end
 
 function internal_energy(model::AbstractHelmholtzModel,v,T,x) 
-    (v2,T2) = _transformVT(v,T,model.molecularWeight,x)
+    (v2,T2) = _transformVT(v,T,molecular_weight(model),x)
     return core_internal_energy(model,v2,T2,x)*1.0u"J/mol"
 end
 
@@ -270,7 +275,7 @@ function core_isochoric_heat_capacity(df::HelmholtzResultData)
 end
 
 function isochoric_heat_capacity(model::AbstractHelmholtzModel,v,T,x)
-    (v2,T2)=_transformVT(v,T,model.molecularWeight,x)
+    (v2,T2)=_transformVT(v,T,molecular_weight(model),x)
     return core_isochoric_heat_capacity(model,v2,T2,x)*1.0u"J/mol/K"
 end
 
@@ -292,7 +297,7 @@ function core_isobaric_heat_capacity(df::HelmholtzResultData)
 end
 
 function isobaric_heat_capacity(model::AbstractHelmholtzModel,v,T,x)
-    (v2,T2)=_transformVT(v,T,model.molecularWeight,x)
+    (v2,T2)=_transformVT(v,T,molecular_weight(model),x)
     return     core_isobaric_heat_capacity(model,v2,T2,x)*1.0u"J/mol/K"
 end
 
@@ -313,7 +318,7 @@ function core_sound_speed(model::AbstractHelmholtzModel,v,T,x)
 end
 
 function sound_speed(model::AbstractHelmholtzModel,v,T,x)
-    (v2,T2)=_transformVT(v,T,model.molecularWeight,x)
+    (v2,T2)=_transformVT(v,T,molecular_weight(model),x)
     return     core_sound_speed(model,v2,T2,x)*1.0u"m/s"
 end
 
@@ -598,7 +603,7 @@ mass_number(mw,x::Union{MolFraction,MolNumber})=mass_number(x,mw)
 struct HelmholtzPhase{T} <: AbstractPhase #this does nothing for now, what functions should implement an abstractPhase? 
     volume::T
     temperature::T
-    material::MolNumber{T}
+    material :: AbstractMaterialVector{T}
     molecularWeight::Array{T}
 end
 
@@ -612,8 +617,16 @@ mw = TT.(molecular_weight(model))
 return HelmholtzPhase{TT}(v1,T1,x1,mw)
 end
 
-function helmholtz_phase(model,v,T,x::AbstractMaterialVector{_T}) where _T
+function helmholtz_phase(model,v,T,x::AbstractMaterialVector{_T}) where _T 
     TT = promote_type(_T,typeof(v),typeof(T))
+    v1 = convert(TT,v)
+    T1 = convert(TT,T)
+    mw = TT.(molecular_weight(model))
+    return HelmholtzPhase{TT}(v1,T1,x,mw)
+    end
+
+function helmholtz_phase(model,v,T,x)
+    TT = promote_type(eltype(x),typeof(v),typeof(T))
     v1 = convert(TT,v)
     T1 = convert(TT,T)
     x1 = mol_number(model,x)
@@ -633,10 +646,12 @@ mass_fraction(a::HelmholtzPhase) = mass_fraction(a.material,molecular_weight(a))
 mass_number(a::HelmholtzPhase) = mass_number(a.material,molecular_weight(a))
 _unpack_helmholtz(a::HelmholtzPhase) = (volume(a),temperature(a),mol_fraction(a))
 
-for op = (:_helmholtzn,    :core_helmholtz,    :core_grad_vt,    :core_grad_x,
+for op = (:_helmholtzn,    :core_helmholtz, :core_gibbs,    :core_grad_vt,    :core_grad_x,
     :core_fg_x,    :core_fg_vt,    :core_dfdv,    :core_dfdt,    :core_hessian_vt,
     :core_fgh_vt,    :core_pressure,    :compressibility_factor,    :core_entropy,
     :core_enthalpy,    :core_internal_energy,    :core_isochoric_heat_capacity,
-    :core_isobaric_heat_capacity,    :core_sound_speed)
+    :core_isobaric_heat_capacity,    :core_sound_speed,
+    :pressure,     :entropy,    :enthalpy,    :internal_energy,    :isochoric_heat_capacity,
+    :isobaric_heat_capacity,    :sound_speed)
     @eval $op(model::AbstractHelmholtzModel,a::HelmholtzPhase) = $op(model,_unpack_helmholtz(a)...)
 end

@@ -1,30 +1,42 @@
 module LavoisierCore
 
-
+using ForwardDiff, DiffResults , Sobol, MappedArrays, LinearAlgebra
+using NLopt, Optim
+using BenchmarkTools
+using Unitful
+include("utils.jl")
 include("core.jl")
 include("IAPWS95.jl")
 include("gerg2008.jl")
+include("solver4.jl")
 
 
 export IAPWS95,GERG2008
-export AbstractHelmholtzModel,diffdata, helmholtz, entropy, enthalpy, pressure, internal_energy, isochoric_heat_capacity, isochoric_heat_capacity
-export normalizefrac,normalizefrac!,mixing_rule,mixing_rule_asymetric,mixing_matrix!,mixing_matrix
-export molar_to_weight,weight_to_molar
+export AbstractHelmholtzModel
+export _helmholtzn,    core_helmholtz, core_gibbs,    core_grad_vt,    core_grad_x,
+    core_fg_x,    core_fg_vt,    core_dfdv,    core_dfdt,    core_hessian_vt,
+    core_fgh_vt,    core_pressure,    compressibility_factor,    core_entropy,
+    core_enthalpy,    core_internal_energy,    core_isochoric_heat_capacity,
+    core_isobaric_heat_capacity,    core_sound_speed,
+    pressure,     entropy,    enthalpy,    internal_energy,    isochoric_heat_capacity,
+    isobaric_heat_capacity,    sound_speed
+export HelmholtzPhase, helmholtz_phase, volume, moles, mass, temperature
+export mol_fraction, mol_number, mass_fraction, mass_number
 
 end
 
 
 #end
 
-#degreesoffredom(material::AbstractMaterial)
+#degreesoffredom(materialAbstractMaterial)
 #material.state
 
-#function eqsolve!(material::AbstractMaterial;kwargs)
+#function eqsolve!(materialAbstractMaterial;kwargs)
 #degreesofFreedom(material) == 0 && error("Non-zero degrees of freedom.")
 #end
 
 ##function 
-#function equilibrium(thermo::AbstractThermoModel;state::AbstractState;kwargs)
+#function equilibrium(thermoAbstractThermoModel;stateAbstractState;kwargs)
 #end
 
 ##moistAir
@@ -34,7 +46,7 @@ end
 
 #end # module
 
-#idea:
+#idea
 
 # data = addcompounds(["CH4","O2","H2","CO2"])
 #model = PengRobinson(data,alphaTSoave(),VdWMixtureRule())
@@ -54,7 +66,7 @@ end
 #entropy(material2)  #probably using CAPE open definitions here
 
 
-#another example, moist air, forking for psycro.jl to use his functions:
+#another example, moist air, forking for psycro.jl to use his functions
 
 # data = addcompounds(["H2O","N2","O2"])
 #MoistAirModel = ASHRAEMoistAir(data), #the system should check if the compounds are correct, it not, then throw an error
