@@ -1,15 +1,34 @@
+using ForwardDiff 
+using DiffResults 
+#using Sobol
+using MappedArrays
+using LinearAlgebra
+using Roots
+using BenchmarkTools
+using Unitful
+#using Distributions
+using PositiveFactorizations
 
+
+include("utils.jl")
 include("core.jl")
+include("solver_core.jl")
+
 include("IAPWS95.jl")
 include("gerg2008.jl")
-include("solver4.jl")
+include("solver5.jl")
 
-using BenchmarkTools
-minigerg = GERG2008([19,1]) #H2S + Ch4
+minigerg = GERG2008(:H2S,:CH4) #H2S + Ch4
 P0 = 4.53e6
 T0 = 190
 x0 = [0.05,0.95]
+
+x01 = [1.731e-02,0.98269]
+x02 = [0.06618,0.93382]
 v0 = 5.690353439153631e-5
+v0 = 1.00367585015v0
+v01 = 2.08e-4
+v02 = 6.62e-05
 #m = IAPWS95()
 #gerg = GERG2008()
 #rho0 = 838.025

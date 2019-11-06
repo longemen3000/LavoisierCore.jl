@@ -1,5 +1,4 @@
 include("core.jl")
-using MappedArrays
 #creates the beta_v and beta_T from the vector specified
 function gerg_betamatrix_from_vector(v,symmetric_op = (a)->a)
     N1 = length(v)
@@ -23,6 +22,7 @@ end
 
 struct GERG2008 <: AbstractHelmholtzModel
     N::Int64
+    acentric_factor::Vector{Float64}
     molecularWeight::Vector{Float64}
     criticalDensity::Vector{Float64}
     criticalTemperature::Vector{Float64}
@@ -55,7 +55,11 @@ end
 function GERG2008(xsel = collect(1:21))
 
     N=length(xsel)
-
+    acentric_factor = [0.0115478,0.0377215,0.223621,0.099493,0.152291,
+                    0.200164,0.183521,0.251506,0.227875,0.301261,
+                    0.349469,0.399552,0.44346,0.492328,-0.215993,
+                    0.0221798,0.0481621,0.344861,0.0941677,-0.390032,
+                    0.0]
     molecularWeight = [16.04246,28.0134,44.0095,30.06904,44.09562,58.1222,58.1222,72.14878,72.14878,86.17536,100.20194,
     114.22852,128.2551,142.28168,2.01588,31.9988,28.0101,18.01528,34.08088,4.002602,39.948]
     criticalTemperature = [190.564,126.192,304.1282,305.322,369.825,407.817,425.125,460.35,469.7,507.82,540.13,
@@ -322,13 +326,19 @@ function GERG2008(xsel = collect(1:21))
 
     indice1 = [1,1,1,1,1,1,1,2,2,4,4,4,5,5,6]
     indice2 = [2,3,4,5,6,7,15,3,4,5,6,7,6,7,7]
-    indice3 = 1:length(indice1)
-    unique_indices = intersect([1,2,3,4,5,6,15],xsel)
+    
+    value_eq = 1:length(indice1)
+    Aij_indices_mat = zeros(Int64,21,21)
+    for i = 1:length(value_eq)
+        Aij_indices_mat[indice1[i],indice2[i]] = value_eq[i]
+     end
+     
+    Aij_indices_mat= Aij_indices_mat[xsel,xsel]
+    Aij_indices2 = findall(!iszero, Aij_indices_mat)
+    Aij_indices = [tuple(Aij_indices2[i][1],Aij_indices2[i][2],Aij_indices_mat[Aij_indices2[i]]) for i = 1:length(Aij_indices2)]
+  
 
-    Aij_indices =[(a1,a2,a3) for (a1,a2,a3) in 
-    zip(indice1[unique_indices],indice2[unique_indices],indice3[unique_indices])]
-
-
+    
 
     fij=[1.0,1.0,1.0,1.0,1.0,0.771035405688,1.0,1.0,1.0,0.130424765150,0.281570073085,0.260632376098,
     0.312572600489e-1,-0.551609771024e-1,-0.551240293009e-1]
@@ -473,11 +483,13 @@ function GERG2008(xsel = collect(1:21))
         k_exp_ijk[i] = length(etaijk[i])
         k_pol_ijk[i] = length(dijk[i]) - k_exp_ijk[i]
     end
-    return GERG2008(N,molecularWeight[xsel],criticalDensity[xsel],criticalTemperature[xsel],criticalPressure[xsel],
+    return GERG2008(N,acentric_factor[xsel],molecularWeight[xsel],criticalDensity[xsel],criticalTemperature[xsel],criticalPressure[xsel],
     ideal_iters,nr[:,xsel],zeta[:,xsel],n0ik[xsel],t0ik[xsel],d0ik[xsel],c0ik[xsel],
     k_pol_ik[xsel],k_exp_ik[xsel],gamma_v[xsel,xsel],gamma_T[xsel,xsel],beta_v[xsel,xsel],beta_T[xsel,xsel],
     Aij_indices,fij,dijk,tijk,nijk,etaijk,epsijk,betaijk,gammaijk, k_pol_ijk,k_exp_ijk)
 end
+
+
 
 function GERG2008(symsel::Vararg{Symbol}) 
     symvalues = [:CH4, :N2, :CO2, :C2, :C3, :nC4, :iC4, :nC5, :iC5, :C6, :C7, :C8, :C9, :C10, 
@@ -498,12 +510,13 @@ function _f0(model::GERG2008,rho,T,x)
 
     RR = 8.314472/8.314510
     common_type = promote_type(typeof(rho),typeof(T),eltype(x))
+    
     res = zero(common_type)
     x0 = zero(common_type)  #for comparison
     ao1 =zero(common_type)
     ao2 =zero(common_type)
     ao_zero =zero(common_type)
-
+    
 
     for i in model.ideal_iters[1]
         x[i] !=x0 && begin
@@ -514,6 +527,7 @@ function _f0(model::GERG2008,rho,T,x)
         ao1 =  model.nr[1,i]+ model.nr[2,i]*tau + model.nr[3,i]*log(tau)
         ao2 = model.nr[4,i]*log(abs(sinh(model.zeta[1,i]*tau))) - model.nr[5,i]*log(cosh(model.zeta[2,i]*tau))+
         model.nr[6,i]*log(abs(sinh(model.zeta[3,i]*tau))) - model.nr[7,i]*log(cosh(model.zeta[4,i]*tau))
+        
         ao3 = log(delta) 
         a0 = RR*(ao1+ao2)+ao3
         res +=x[i]*(a0+log(x[i]))
@@ -619,10 +633,10 @@ function _fr2(model::GERG2008,delta,tau,x)
     res0 =zero(common_type)
     x0 = zero(common_type)
 
-    for kk in 1:length(model.Aij_indices) # i are CartesianIndices
+    for kk in 1:length(model.Aij_indices) 
         
         i1,i2,i0 = model.Aij_indices[kk]
-            
+          
             x[i1] != x0 && x[i2] !=x0 && begin
             res1 = res0
             for j=1:model.k_pol_ijk[i0]
@@ -649,19 +663,30 @@ end
 return res 
 end
 
-function ideal_helmholtz(model::GERG2008,v,T,x)
+function core_ideal_helmholtz(model::GERG2008,v,T,x)
     rho = 1.0e-3/v
     R= Unitful.ustrip(Unitful.R)
     return R*T*_f0(model,rho,T,x)
 end
 
-function residual_helmholtz(model::GERG2008,v,T,x)
+function core_residual_helmholtz(model::GERG2008,v,T,x)
     rho = 1.0e-3/v
     R= Unitful.ustrip(Unitful.R)
     delta = _delta(model,rho,T,x)
     tau = _tau(model,rho,T,x)
     return R*T*(_fr1(model,delta,tau,x)+_fr2(model,delta,tau,x))
 end
+
+
+
+
+
+
+#an interface to stract properties stored in the model, the minimum are:
+#core_helmholtz (the potential energy)
+#molecular weight (for the transformations mass/molar)
+#compounds_number 
+
 
 function core_helmholtz(model::GERG2008,v,T,x)
     rho = 1.0e-3/v
@@ -671,24 +696,15 @@ function core_helmholtz(model::GERG2008,v,T,x)
     return R*T*(_f0(model,rho,T,x)+_fr1(model,delta,tau,x)+_fr2(model,delta,tau,x))
 end
 
-
-
-
-
-#an interface to stract properties stored in the model, the minimum are:
-#molecular weight (for the transformations mass/molar)
-#critical temperature, pressure(for the transformations mass/molar)
-
-###important! you can use whatever you want over the design of the model, but those functions
-##interact with the rest of the model, so the have to be in SI units
-
 compounds_number(model::GERG2008)=model.N
-criticalDensity(model::GERG2008)=1000.0 .* model.criticalDensity
 molecular_weight(model::GERG2008) = model.molecularWeight
-criticalTemperature(model::GERG2008) = model.criticalTemperature
-criticalVolume(model::GERG2008) = 1 ./criticalDensity(model)
 
 
-#those functions are necessary
+#functions for a critical model, maybe adding this as a trait?
+critical_density(model::GERG2008)=1000.0 .* model.criticalDensity
+critical_pressure(model::GERG2008) = model.criticalPressure
+critical_temperature(model::GERG2008) = model.criticalTemperature
+critical_volume(model::GERG2008) = 1 ./criticalDensity(model)
+acentric_factor(model::GERG2008) = model.acentric_factor
 covolumes(model::GERG2008) = 0.0778*model.criticalTemperature*Unitful.ustrip(Unitful.R) ./ model.criticalPressure
 

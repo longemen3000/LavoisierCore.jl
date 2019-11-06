@@ -1,9 +1,16 @@
 module LavoisierCore
 
-using ForwardDiff, DiffResults , Sobol, MappedArrays, LinearAlgebra
-using NLopt, Optim
-using BenchmarkTools
+using ForwardDiff 
+using DiffResults 
+#using Sobol
+using MappedArrays
+using LinearAlgebra
+using Roots
+#using BenchmarkTools
 using Unitful
+#using Distributions
+using PositiveFactorizations
+
 include("utils.jl")
 include("core.jl")
 include("IAPWS95.jl")
@@ -22,7 +29,8 @@ export _helmholtzn,    core_helmholtz, core_gibbs,    core_grad_vt,    core_grad
     isobaric_heat_capacity,    sound_speed
 export HelmholtzPhase, helmholtz_phase, volume, moles, mass, temperature
 export mol_fraction, mol_number, mass_fraction, mass_number
-
+export pt_flash
+export Gernert
 end
 
 

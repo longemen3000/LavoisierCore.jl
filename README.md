@@ -43,7 +43,7 @@ at this moment, this package has implementations of
 if you defined your helmholtz equation, then you have access to all those functions.
 
 ## Usage example:
-```
+```julia
 m = IAPWS95() #this model contains everything, so it doesn't need any variables to be created
 
 # with unitful properties, it handles automatically the conversion beetween molar and mass density, 
@@ -70,10 +70,26 @@ This package is in heavy development, don't dare to even try to use this in prod
 Aspen is expensive, COOLPROP uses C++, and the thermodynamic papers are seldom implemented for free (for example,
 the SAFT equations), and because is fun!, why not?
 
-#News (September 19, 2019)
+#News 
+##September 19, 2019
+Added a equilibrium solver in Volume-Temperature-mol, based on a unified representation
+of helmholtz equilibria (). needs testing with consistent EOS
 
-Added a equilibrium solver in Volume-Temperature-mol, based on a unified representation 
-of helmholtz equilibria. a Pressure-Temperature-mol is following
+##November 3, 2019
+Added a PT two phase solver based on the TREND solver (Gernert el. al, 2014). added an interfase to call a solver:
+
+```julia
+water_and_gases = GERG2008(:H2O,:N2,:O2)
+method = Gernert()
+P0 = 1.1u"atm" #it accepts a number (Pa), but in this case, unitful quantities are better
+T = 25u"°C"
+method = Gernert()
+x0 = [0.6,0.2,0.2]
+phases = pt_flash(method,water_and_gases,P0,T0,x0)
+entropy.(model,phases) #vector of entropies with units
+core_entropy.(model,phases) #vector of entropies without units (SI)
+```
+Any suggestions are appreciated!
 
 
 

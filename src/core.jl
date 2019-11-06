@@ -2,11 +2,11 @@ abstract type AbstractThermoModel end #base model
 abstract type AbstractHelmholtzModel <:  AbstractThermoModel end
 abstract type AbstractMixingRule end # for mixing rules
 abstract type AbstractPhase end #for solvers
-abstract type AbstractSpec{T,UNIT} end
 
+const R_GAS = ustrip(Unitful.R)
 Base.broadcastable(x::AbstractHelmholtzModel) = Ref(x)
 
-
+molecular_weight(x) = x
 
 
 
@@ -20,8 +20,56 @@ x:molar fraction, adimensional
 
 
 """
+
+
 function core_helmholtz(model::M,V,T,x) where M <:AbstractHelmholtzModel
 end
+# partial_molar_property
+#is equivalent to df/dni with with T,v, nj constant
+
+function partial_molar_property(core_fn,model,v,T,x)
+    function partial_fun(z)
+        sum_n = sum(z)
+        sum_n< zero(sum_n) && return zero(sum_n) 
+        xx = z*inv(sum_n)
+        return sum_n*core_fn(model,v,T,xx) 
+    end
+    return ForwardDiff.gradient(partial_fun,x)
+end
+
+function core_logfugacity_coefficient(model,v,T,x)
+    dAdn =  partial_molar_property(core_residual_helmholtz,model,v,T,x) 
+    lnz = log(core_compressibility_factor(model,v,T,x))
+    R = R_GAS
+    return dAdn/(R*T) .- lnz
+end
+
+
+function core_logfugacity_coefficient(model,P,v,T,x)
+    dAdn =  partial_molar_property(core_residual_helmholtz,model,v,T,x) 
+    lnz = log(core_compressibility_factor(model,P,v,T,x))
+    R = R_GAS
+    return dAdn/(R*T) .- lnz
+end
+
+function core_logfugacity_coefficientn(model,v,T,n)
+    return core_fugacity_coefficient(model,v,T,n/sum(n))
+end
+
+function core_logfugacity_coefficientn(model,P,v,T,n)
+    return core_fugacity_coefficient(model,P,v,T,n/sum(n))
+end
+
+function core_logfugacity(model,v,T,x)
+    dAdn =  partial_molar_property(core_residual_helmholtz,model,v,T,x) 
+    R = R_GAS
+    return log.(x .* (R*T/v)) .+ dAdn
+end
+
+function core_logfugacityn(model,v,T,n)
+    return core_logfugacityn(model,v,T,n/sum(n))
+end
+
 
 
 Base.length(model::AbstractHelmholtzModel)=compounds_number(model)
@@ -37,6 +85,9 @@ function  _helmholtzn(model::AbstractHelmholtzModel,V,T,n)
     return sum_n*core_helmholtz(model,v,T,x)
 end
 
+function partial_molar_volume(model,v,T,x)
+    return partial_molar_property(core_pressure,model,v,T,x)./core_dpdv(model,v,T,x)
+end
 #helmholtz density, energy in a cubic meter, used in VTC equilibrium
 function _helmholtzd(model::AbstractHelmholtzModel,T,C) 
     sum_c = sum(C)
@@ -54,13 +105,22 @@ end
 function core_gibbs(model::AbstractHelmholtzModel,v,T,x)
     return core_helmholtz(model,v,T,x)+core_pressure(model,v,T,x)*v
 end
+
+function core_gibbs(model::AbstractHelmholtzModel,P,v,T,x)
+    return core_helmholtz(model,v,T,x)+P*v
+end
 #this has the neat property: core_helmholtz(model,v,T,x)= -PV - sum(Ni*μi)
 function _chemical_potential(model::AbstractHelmholtzModel,v,T,x)
 f = z-> _helmholtzn(model,v,T,z)
 return ForwardDiff.gradient(f,x)
 end
 
-function _dpdv(model::AbstractHelmholtzModel,v,T,x)
+function _chemical_potentiald(model::AbstractHelmholtzModel,v,T,x)
+    f = z-> _helmholtzd(model,T,z/v)
+    return ForwardDiff.gradient(f,x)
+    end
+
+function core_dpdv(model::AbstractHelmholtzModel,v,T,x)
     return ForwardDiff.derivative(z->core_pressure(model,z,T,x),v)
 end
 
@@ -95,8 +155,7 @@ function core_fg_vt(model::AbstractHelmholtzModel,v,T,x)
 end
 
 function core_dfdv(model::AbstractHelmholtzModel,v,T,x)
-    return ForwardDiff.gradient(
-        z->core_helmholtz(model,z[1],T,x),[v])[1]
+    return ForwardDiff.derivative(z->core_helmholtz(model,z,T,x),v)
 end
 
 function core_dfdt(model::AbstractHelmholtzModel,v,T,x)
@@ -158,7 +217,7 @@ core_hessian_vt(df::HelmholtzResultData)  = DiffResults.hessian(df.diffresult)[1
 #Pressure, a single derivative is faster
 #
 function core_pressure(model::AbstractHelmholtzModel,v,T,x)
-    return -core_grad_vt(model,v,T,x)[1]
+    return -core_dfdv(model,v,T,x)
 return 
 end
 
@@ -174,15 +233,23 @@ function pressure(df::HelmholtzResultData)
     return core_pressure(df)*1.0u"Pa"
 end
 
+function core_compressibility_factor(model::AbstractHelmholtzModel,v,T,x) 
+    return core_pressure(model,v,T,x)*v/(R_GAS*T)
+end
+
+function core_compressibility_factor(model::AbstractHelmholtzModel,P,v,T,x) 
+    return P*v/(R_GAS*T)
+end
+
 function compressibility_factor(model::AbstractHelmholtzModel,v,T,x) 
     (v2,T2) = _transformVT(v,T,molecular_weight(model),x)
-    return core_pressure(model,v2,T2,x)*v2/(ustrip(Unitful.R)*T2)
+    return core_compressibility_factor(model,v2,T2,x)
 end
 
 function compressibility_factor(df::HelmholtzResultData) 
     (v,T)=_valuevt(df)
     P= core_pressure(df)
-    return P*v/(Unitful.ustrip(Unitful.R)*T)
+    return P*v/(Unitful.R_GAS*T)
 end
 
 
@@ -190,7 +257,7 @@ end
 #Entropy
 #
 function core_entropy(model::AbstractHelmholtzModel,v,T,x)
-    return -core_grad_vt(model,v,T,x)[2]
+    return -core_dfdt(model,v,T,x)
 return 
 end
 function core_entropy(df::HelmholtzResultData)
@@ -210,7 +277,8 @@ end
 #enthalpy
 #
 function core_enthalpy(model::AbstractHelmholtzModel,v,T,x)
-    (f,df) = core_fg_vt(model,v,T,x)
+    f = core_helmholtz(model,v,T,x)
+    df = core_grad_vt(model,v,T,x)
     return f - df[1]*v-df[2]*T
 end
 
@@ -466,134 +534,123 @@ end
 
 abstract type AbstractMaterialVector{T} <: AbstractVector{T} end
 
-Base.size(A::AbstractMaterialVector) = size(A.values) #size of the vector
-Base.length(A::AbstractMaterialVector)=length(A.values)
-Base.getindex(A::AbstractMaterialVector, I::Int) = Base.getindex(A.values,I)
-Base.getindex(A::AbstractMaterialVector, I::Vararg{Int})  = Base.getindex(A.values,I...)
-Base.iterate(S::AbstractMaterialVector, state=1) = Base.iterate(S.values)
+Base.size(A::AbstractMaterialVector) = size(A.n_values) #size of the vector
+Base.length(A::AbstractMaterialVector)=length(A.n_values)
 Base.IndexStyle(::Type{AbstractMaterialVector}) = IndexLinear()
 
 struct MolFraction{T} <: AbstractMaterialVector{T}
-    values::Vector{T}
-    amount::T
+    n_values::Vector{T}
+    n_amount::T
+    m_amount::T
+    mw::Vector{T}
 end
 
 struct MassFraction{T} <: AbstractMaterialVector{T}
-    values::Vector{T}
-    amount::T
+    n_values::Vector{T}
+    n_amount::T
+    m_amount::T
+    mw::Vector{T}
 end
 
 struct MolNumber{T} <: AbstractMaterialVector{T}
-    values::Vector{T}
-    amount::T
+    n_values::Vector{T}
+    n_amount::T
+    m_amount::T
+    mw::Vector{T}
 end
-Base.getindex(A::MolNumber, I::Int) =Base.getindex(A.amount .* A.values,I)
-Base.getindex(A::MolNumber, I::Vararg{Int}) =Base.getindex(A.amount .* A.values,I...)
-
-
 
 struct MassNumber{T} <: AbstractMaterialVector{T}
-    values::Vector{T}
-    amount::T
+    n_values::Vector{T}
+    n_amount::T
+    m_amount::T
+    mw::Vector{T}
 end
-Base.getindex(A::MassNumber, I::Int) = Base.getindex(A.amount .* A.values,I)
-Base.getindex(A::MassNumber, I::Vararg{Int}) = Base.getindex(A.amount .* A.values,I...)
+Base.getindex(A::MolNumber, i::Int) =A.n_values[i]*A.n_amount
+Base.getindex(A::MolNumber, I::Vararg{Int}) = A.n_values[I...]*A.n_amount
+Base.getindex(A::MassNumber, i::Int) = A.n_values[i]*A.mw[i]*A.n_amount*1e-3
+Base.getindex(A::MassNumber, I::Vararg{Int}) = A.n_values[I...]*A.mw[I...]*A.n_amount*1e-3
+Base.getindex(A::MolFraction, i::Int) =A.n_values[i]
+Base.getindex(A::MolFraction, I::Vararg{Int}) =A.n_values[I...]
+Base.getindex(A::MassFraction, i::Int) = A.n_values[i]*A.mw[i]*A.n_amount*inv(A.m_amount)*1e-3
+Base.getindex(A::MassFraction, I::Vararg{Int}) = A.n_values[I...]*A.mw[I...]*A.n_amount*inv(A.m_amount)*1e-3
+moles(x::AbstractMaterialVector) = x.n_amount
+mass(x::AbstractMaterialVector) = x.m_amount
 
-
-moles(x::Union{MolFraction,MolNumber}) = x.amount
-moles(x::Union{MolFraction,MolNumber},mw) = x.amount
-moles(mw,x::Union{MolFraction,MolNumber}) = x.amount
-moles(x::Union{MassFraction,MassNumber},mw) =sum(x.amount*1e3 .* x.values ./ mw)
-moles(x::Union{MassFraction,MassNumber},mw::AbstractHelmholtzModel) = moles(x,molecular_weight(mw))
-moles(mw,x::Union{MassFraction,MassNumber}) =moles(x,mw)
-
-mass(x::Union{MassFraction,MassNumber}) = x.amount
-mass(x::Union{MassFraction,MassNumber},mw) = x.amount
-mass(x::Union{MassFraction,MassNumber},mw) = x.amount
-mass(x::Union{MolFraction,MolNumber},mw) =sum(x.amount*1e-3 .* x.values .* mw)
-mass(x::Union{MolFraction,MolNumber},mw::AbstractHelmholtzModel) = mass(x,molecular_weight(mw))
-mass(mw,x::Union{MolFraction,MolNumber}) =mass(x,mw)
-
-function mol_fraction(x::T1) where T1 <: AbstractVector
-    T = eltype(x/sum(x))
-     return MolFraction{T}(x/sum(x),one(T))
+#constructors
+function mol_fraction(x::AbstractVector,mw::AbstractVector,n_amount_opt = nothing)
+    T = promote_type(eltype(x),eltype(mw))
+    n = convert(T,sum(x))
+    n_values = convert.(T,x)
+    n_values ./=n
+    if isnothing(n_amount_opt)
+        n_amount = sum(x)
+    else
+        n_amount = convert(T,n_amount_opt)
+    end
+    m_amount = LinearAlgebra.dot(x,mw)*1e-3
+    return MolFraction{T}(n_values,n_amount,m_amount,convert.(T,mw))
 end
-
-function mol_fraction(x::Union{MassFraction{T},MassNumber{T}},mw) where T
-    sum1 = sum(x.amount*1e3 .* x.values ./ mw)
-    MolFraction{T}(x.amount * 1e3 .* x.values ./sum1 ./ mw,one(T))
-end
-
-mol_fraction(x::MolFraction) = x
-mol_fraction(model::AbstractHelmholtzModel,x) = mol_fraction(x)
-mol_fraction(x,model::AbstractHelmholtzModel) = mol_fraction(x)
-mol_fraction(x::MolNumber{T})  where T = MolFraction{T}(x.values,x.amount)
-mol_fraction(x::Union{MolFraction,MolNumber},mw) = mol_fraction(x)
-mol_fraction(mw,x::Union{MolFraction,MolNumber}) = mol_fraction(x)
-mol_fraction(x::Union{MassFraction,MassNumber}) = throw(ArgumentError("molecular weight missing"))
-mol_fraction(x::Union{MassFraction,MassNumber},model::AbstractHelmholtzModel) = mol_fraction(x,molecular_weight(model))
-mol_fraction(mw,x::Union{MassFraction,MassNumber})=mol_fraction(x,mw)
-
-function mol_number(x::T1)  where T1 <: AbstractVector
-    T = eltype(x/sum(x))
-     return MolNumber{T}(x/sum(x),sum(x))
+function mol_number(x::AbstractVector,mw::AbstractVector,n_amount_opt = nothing)
+    T = promote_type(eltype(x),eltype(mw))
+    n = convert(T,sum(x))
+    n_values = convert.(T,x)
+    n_values ./=n
+    if isnothing(n_amount_opt)
+        n_amount = sum(x)
+    else
+        n_amount = convert(T,n_amount_opt)
+    end
+    m_amount = LinearAlgebra.dot(x,mw)*1e-3
+    return MolNumber{T}(n_values,n_amount,m_amount,convert.(T,mw))
 end
 
-function mol_number(x::Union{MassFraction{T},MassNumber{T}},mw) where T
-    sum1 = sum(x.amount*1e3 .* x.values ./ mw)
-    MolNumber{T}(x.amount * 1e3 .* x.values ./sum1 ./ mw,sum1)
+function mass_fraction(x::AbstractVector,mw::AbstractVector,m_amount_opt = nothing)
+    T = promote_type(eltype(x),eltype(mw))
+    if isnothing(m_amount_opt)
+        m_amount = sum(x)
+    else
+        m_amount = convert(T,m_amount_opt)
+    end
+    n_values = normalizefrac(x .* inv.(mw))
+    n_amount = LinearAlgebra.dot(x,inv.(mw))*1e-3
+    return MassFraction{T}(n_values,n_amount,m_amount,convert.(T,mw))
 end
 
-mol_number(model::AbstractHelmholtzModel,x) = mol_number(x)
-mol_number(x,model::AbstractHelmholtzModel) = mol_number(x)
-mol_number(x::MolNumber) = x
-mol_number(model::AbstractHelmholtzModel, x::Union{MolFraction, MolNumber}) = mol_number(x)
-mol_number(x::MolFraction{T})  where T = MolNumber{T}(x.values,x.amount)
-mol_number(x::Union{MolFraction,MolNumber},mw) = mol_number(x)
-mol_number(mw,x::Union{MolFraction,MolNumber}) = mol_number(x)
-mol_number(x::Union{MassFraction,MassNumber}) = throw(ArgumentError("molecular weight missing"))
-mol_number(x::Union{MassFraction,MassNumber},model::AbstractHelmholtzModel) = mol_number(x,molecular_weight(model))
-mol_number(mw,x::Union{MassFraction,MassNumber})=mol_number(x,mw)
-
-function mass_fraction(x::T1) where T1 <: AbstractVector
-    T = eltype(x/sum(x))
-     return MassFraction{T}(x/sum(x),sum(x))
+function mass_number(x::AbstractVector,mw::AbstractVector,n_amount_opt = nothing)
+    T = promote_type(eltype(x),eltype(mw))
+    if isnothing(m_amount_opt)
+        m_amount = sum(x)
+    else
+        m_amount = convert(T,m_amount_opt)
+    end
+    n_values = normalizefrac(x .* inv.(mw) .* 1e3)
+    n_amount = LinearAlgebra.dot(x,inv.(mw))*1e3
+    return MassNumber{T}(n_values,n_amount,m_amount,convert.(T,mw))
 end
 
-function mass_fraction(x::Union{MolFraction{T},MolNumber{T}},mw) where T
-    sum1 = sum(x.amount*1e-3 .* x.values .* mw)
-    MassFraction{T}(x.amount*1e-3 .* x.values ./sum1 .* mw,sum1)
+mass_number(x::AbstractVector,model::AbstractThermoModel) = mass_number(x,molecular_weight(model))
+mass_fraction(x::AbstractVector,model::AbstractThermoModel) = mass_fraction(x,molecular_weight(model))
+mol_number(x::AbstractVector,model::AbstractThermoModel) = mol_number(x,molecular_weight(model))
+mol_fraction(x::AbstractVector,model::AbstractThermoModel) = mol_fraction(x,molecular_weight(model))
+
+mass_number(model::AbstractThermoModel,x::AbstractVector) = mass_number(x,molecular_weight(model))
+mass_fraction(model::AbstractThermoModel,x::AbstractVector) = mass_fraction(x,molecular_weight(model))
+mol_number(model::AbstractThermoModel,x::AbstractVector) = mol_number(x,molecular_weight(model))
+mol_fraction(model::AbstractThermoModel,x::AbstractVector) = mol_fraction(x,molecular_weight(model))
+
+#conversions
+function mass_number(x::AbstractMaterialVector{T}) where T
+    return MassNumber{T}(x.n_values,x.n_amount,x.m_amount,x.mw)
+end  
+function mass_fraction(x::AbstractMaterialVector{T}) where T
+    return MassFraction{T}(x.n_values,x.n_amount,x.m_amount,x.mw)
 end
-
-mass_fraction(model::AbstractHelmholtzModel,x) = mass_fraction(x)
-mass_fraction(x,model::AbstractHelmholtzModel) = mass_fraction(x)
-mass_fraction(x::MassFraction) = x
-mass_fraction(x::MassNumber{T})  where T = MassFraction{T}(x.values,x.amount)
-mass_fraction(x::Union{MassFraction,MassNumber},mw) = mass_fraction(x)
-mass_fraction(mw,x::Union{MassFraction,MassNumber}) = mass_fraction(x)
-mass_fraction(x::Union{MolFraction,MolNumber}) = throw(ArgumentError("molecular weight missing"))
-mass_fraction(x::Union{MolFraction,MolNumber},model::AbstractHelmholtzModel) = mass_fraction(x,molecular_weight(model))
-mass_fraction(mw,x::Union{MolFraction,MolNumber})=mass_fraction(x,mw)
-
-function mass_number(x::T1) where T1 <: AbstractVector
-    T = eltype(x/sum(x))
-     return MassNumber{T}(x/sum(x),sum(x))
+function mol_fraction(x::AbstractMaterialVector{T}) where T
+    return MolFraction{T}(x.n_values,x.n_amount,x.m_amount,x.mw)
 end
-
-function mass_number(x::Union{MolFraction{T},MolNumber{T}},mw) where T
-    sum1 = sum(x.amount*1e-3 .* x.values .* mw)
-    MassNumber{T}(x.amount*1e-3 .* x.values ./sum1 .* mw,sum1)
+function mol_number(x::AbstractMaterialVector{T}) where T
+    return MolNumber{T}(x.n_values,x.n_amount,x.m_amount,x.mw)
 end
-
-mass_number(model::AbstractHelmholtzModel,x) = mass_number(x)
-mass_number(x,model::AbstractHelmholtzModel) = mass_number(x)
-mass_number(x::MassNumber) = x
-mass_number(x::MassFraction{T})  where T = MassFraction{T}(x.values,x.amount)
-mass_number(x::Union{MassFraction,MassNumber},mw) = mass_number(x)
-mass_number(mw,x::Union{MassFraction,MassNumber}) = mass_number(x)
-mass_number(x::Union{MolFraction,MolNumber}) = throw(ArgumentError("molecular weight missing"))
-mass_number(x::Union{MolFraction,MolNumber},model::AbstractHelmholtzModel) = mass_number(x,molecular_weight(model))
-mass_number(mw,x::Union{MolFraction,MolNumber})=mass_number(x,mw)
 
 ####################################
 #helmholtz phase
@@ -604,7 +661,6 @@ struct HelmholtzPhase{T} <: AbstractPhase #this does nothing for now, what funct
     volume::T
     temperature::T
     material :: AbstractMaterialVector{T}
-    molecularWeight::Array{T}
 end
 
 
@@ -612,38 +668,27 @@ function helmholtz_phase(model,v,T,x)
 TT = promote_type(eltype(x),typeof(v),typeof(T))
 v1 = convert(TT,v)
 T1 = convert(TT,T)
-x1 = mol_number(TT.(x))
-mw = TT.(molecular_weight(model))
-return HelmholtzPhase{TT}(v1,T1,x1,mw)
+x1 = mol_number(model,x)
+return HelmholtzPhase{TT}(v1,T1,x1)
 end
 
 function helmholtz_phase(model,v,T,x::AbstractMaterialVector{_T}) where _T 
     TT = promote_type(_T,typeof(v),typeof(T))
     v1 = convert(TT,v)
     T1 = convert(TT,T)
-    mw = TT.(molecular_weight(model))
-    return HelmholtzPhase{TT}(v1,T1,x,mw)
-    end
+    return HelmholtzPhase{TT}(v1,T1,mol_number(x))
+end
 
-function helmholtz_phase(model,v,T,x)
-    TT = promote_type(eltype(x),typeof(v),typeof(T))
-    v1 = convert(TT,v)
-    T1 = convert(TT,T)
-    x1 = mol_number(model,x)
-    mw = TT.(molecular_weight(model))
-    return HelmholtzPhase{TT}(v1,T1,x1,mw)
-    end
-
-volume(a::HelmholtzPhase) = a.volume
+molar_volume(a::HelmholtzPhase) = a.volume
 temperature(a::HelmholtzPhase) = a.temperature
-molecular_weight(a::HelmholtzPhase) = a.molecularWeight
+molecular_weight(a::HelmholtzPhase) = a.material.mw
 moles(a::HelmholtzPhase)= moles(a.material)
-mass(a::HelmholtzPhase) = mass(a.material,a.molecularWeight)
+mass(a::HelmholtzPhase) = mass(a.material)
 
 mol_fraction(a::HelmholtzPhase) = mol_fraction(a.material)
 mol_number(a::HelmholtzPhase) = mol_number(a.material)
-mass_fraction(a::HelmholtzPhase) = mass_fraction(a.material,molecular_weight(a))
-mass_number(a::HelmholtzPhase) = mass_number(a.material,molecular_weight(a))
+mass_fraction(a::HelmholtzPhase) = mass_fraction(a.material)
+mass_number(a::HelmholtzPhase) = mass_number(a.material)
 _unpack_helmholtz(a::HelmholtzPhase) = (volume(a),temperature(a),mol_fraction(a))
 
 for op = (:_helmholtzn,    :core_helmholtz, :core_gibbs,    :core_grad_vt,    :core_grad_x,
@@ -652,6 +697,13 @@ for op = (:_helmholtzn,    :core_helmholtz, :core_gibbs,    :core_grad_vt,    :c
     :core_enthalpy,    :core_internal_energy,    :core_isochoric_heat_capacity,
     :core_isobaric_heat_capacity,    :core_sound_speed,
     :pressure,     :entropy,    :enthalpy,    :internal_energy,    :isochoric_heat_capacity,
-    :isobaric_heat_capacity,    :sound_speed)
-    @eval $op(model::AbstractHelmholtzModel,a::HelmholtzPhase) = $op(model,_unpack_helmholtz(a)...)
+    :isobaric_heat_capacity,    :sound_speed, :core_dpdv)
+    @eval $op(model::AbstractHelmholtzModel,a::HelmholtzPhase) = $op(model,molar_volume(a),temperature(a),mol_fraction(a))
+    @eval $op(model::AbstractHelmholtzModel,v,T,x::Union{MassFraction,MassFraction,MassNumber}) = $op(model,v,T,mol_fraction(x))
 end
+
+
+
+
+
+
