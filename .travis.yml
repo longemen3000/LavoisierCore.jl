@@ -1,0 +1,19 @@
+language: julia
+  - osx
+  - linux
+  - windows
+julia:
+  - 1.3
+  - nightly
+
+  matrix:
+  allow_failures:
+    - julia: nightly
+  fast_finish: true
+notifications:
+  email: false
+
+script: julia --project=docs -e '
+      using Pkg;
+      Pkg.develop(PackageSpec(path=pwd()));
+      Pkg.instantiate();'
