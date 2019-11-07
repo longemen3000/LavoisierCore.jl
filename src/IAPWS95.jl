@@ -1,6 +1,3 @@
-
-
-
 struct IAPWS95 <: AbstractHelmholtzModel
     molecularWeight::Array{Float64,1}
     n00::Array{Float64,1}
@@ -161,4 +158,8 @@ end
 
 molecular_weight(model::IAPWS95) = model.molecularWeight #MW
 compounds_number(model::IAPWS95)= 1
-covolumes(model::IAPWS95) =[1.9900804839131538e-5] #copied from covolumes(GERG2008)
+covolumes(model::IAPWS95) =[1.4981e-5] #10000 bar
+critical_pressure(model::IAPWS95)  = [2.2064e7]
+critical_volume(model::IAPWS95)  = [inv(17873.72799560906)]
+critical_temperature(model::IAPWS95)  = [647.096]  
+critical_density(model::IAPWS95) = [17873.72799560906]

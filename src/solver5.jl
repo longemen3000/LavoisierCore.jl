@@ -365,3 +365,9 @@ end
     end
 end
 
+#mono_t_psiflash(model::AbstractHelmholtzModel,T0::Real,ψ0::Real,x0)
+#Tr = T0/dot(x0,critical_temperature(model))
+#if Tr>one(Tr)
+#
+#else
+#end
