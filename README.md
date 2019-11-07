@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/longemen3000/LavoisierCore.jl.svg?branch=master)](https://travis-ci.com/longemen3000/LavoisierCore.jl)
+
 # LavoisierCore.jl
 Abstract Definitions and Functions to establish a thermodynamic library in julia
 
