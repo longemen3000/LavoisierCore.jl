@@ -390,11 +390,6 @@ function sound_speed(model::AbstractHelmholtzModel,v,T,x)
     return     core_sound_speed(model,v2,T2,x)*1.0u"m/s"
 end
 
-
-
-
-
-
 ####################################################
 
 #mixing rules
@@ -471,7 +466,6 @@ function mixing_rule_asymetric(op,op_asym,x,p,A,A_asym)
     return res1
 end
 
-
 geometric_mean_rule(a,b)=sqrt(a*b)
 
 arithmetic_mean_rule(a,b)=(a+b)/2
@@ -481,7 +475,6 @@ harmonic_mean_rule(a,b)=2*a*b/(a+b)
 cubic_mean_rule(a,b)=((a^(1/3) + b^(1/3))/2)^3
 
 _power_mean_rule(a,b,n)=((a^(1/n) + b^(1/n))/2)^n
-
 
 power_mean_rule(n) =(a,b)-> _power_mean_rule(a,b,n)
 
@@ -526,7 +519,6 @@ function mixing_matrix!(op,A,p)
 
 end
 
-
 #mass and molar types for dispatch
 #the default is store the fractions and the amount.
 #for molar types, the amount is in moles (gmol, as used in the metric system)
@@ -565,6 +557,7 @@ struct MassNumber{T} <: AbstractMaterialVector{T}
     m_amount::T
     mw::Vector{T}
 end
+
 Base.getindex(A::MolNumber, i::Int) =A.n_values[i]*A.n_amount
 Base.getindex(A::MolNumber, I::Vararg{Int}) = A.n_values[I...]*A.n_amount
 Base.getindex(A::MassNumber, i::Int) = A.n_values[i]*A.mw[i]*A.n_amount*1e-3
@@ -663,7 +656,6 @@ struct HelmholtzPhase{T} <: AbstractPhase #this does nothing for now, what funct
     material :: AbstractMaterialVector{T}
 end
 
-
 function helmholtz_phase(model,v,T,x)
 TT = promote_type(eltype(x),typeof(v),typeof(T))
 v1 = convert(TT,v)
@@ -679,17 +671,32 @@ function helmholtz_phase(model,v,T,x::AbstractMaterialVector{_T}) where _T
     return HelmholtzPhase{TT}(v1,T1,mol_number(x))
 end
 
-molar_volume(a::HelmholtzPhase) = a.volume
-temperature(a::HelmholtzPhase) = a.temperature
-molecular_weight(a::HelmholtzPhase) = a.material.mw
-moles(a::HelmholtzPhase)= moles(a.material)
-mass(a::HelmholtzPhase) = mass(a.material)
+ccore_moles(a::HelmholtzPhase)= moles(a.material)
+core_mass(a::HelmholtzPhase) = mass(a.material)
+core_mol_volume(a::HelmholtzPhase) = a.volume
+core_volume(a::HelmholtzPhase) = a.volume*core_moles(a)
+core_mol_density(a::HelmholtzPhase) =inv(a.volume)
+core_mass_volume(a::HelmholtzPhase) = a.volume*core_moles(a)/core_mass(a)
+core_mass_density(a::HelmholtzPhase) =inv(a.volume*core_moles(a)/core_mass(a))
+core_temperature(a::HelmholtzPhase) = a.temperature
+core_molecular_weight(a::HelmholtzPhase) = a.material.mw
+
+mol_volume(a::HelmholtzPhase) = core_molar_volume(a)*1.0u"mol/m^3"
+mol_density(a::HelmholtzPhase) =core_molar_density(a)*1.0u"m^3/mol"
+mass_volume(a::HelmholtzPhase) = core_mass_volume(a)*1.0u"m^3/kg"
+mass_density(a::HelmholtzPhase) =core_mass_density(a)*1.0u"kg/m^3"
+temperature(a::HelmholtzPhase) = core_temperature(a)*1.0u"K"
+molecular_weight(a::HelmholtzPhase) = core_molecular_weight(a).*1.0u"g/mol"
+moles(a::HelmholtzPhase)= core_moles(a)*1.0u"mol"
+mass(a::HelmholtzPhase) = core_mass(a)*1.0u"kg"
+
+
 
 mol_fraction(a::HelmholtzPhase) = mol_fraction(a.material)
 mol_number(a::HelmholtzPhase) = mol_number(a.material)
 mass_fraction(a::HelmholtzPhase) = mass_fraction(a.material)
 mass_number(a::HelmholtzPhase) = mass_number(a.material)
-_unpack_helmholtz(a::HelmholtzPhase) = (volume(a),temperature(a),mol_fraction(a))
+_unpack_helmholtz(a::HelmholtzPhase) = (core_molar_volume(a),core_temperature(a),mol_fraction(a))
 
 for op = (:_helmholtzn,    :core_helmholtz, :core_gibbs,    :core_grad_vt,    :core_grad_x,
     :core_fg_x,    :core_fg_vt,    :core_dfdv,    :core_dfdt,    :core_hessian_vt,
@@ -698,7 +705,7 @@ for op = (:_helmholtzn,    :core_helmholtz, :core_gibbs,    :core_grad_vt,    :c
     :core_isobaric_heat_capacity,    :core_sound_speed,
     :pressure,     :entropy,    :enthalpy,    :internal_energy,    :isochoric_heat_capacity,
     :isobaric_heat_capacity,    :sound_speed, :core_dpdv)
-    @eval $op(model::AbstractHelmholtzModel,a::HelmholtzPhase) = $op(model,molar_volume(a),temperature(a),mol_fraction(a))
+    @eval $op(model::AbstractHelmholtzModel,a::HelmholtzPhase) = $op(model,core_mol_volume(a),core_temperature(a),mol_fraction(a))
     @eval $op(model::AbstractHelmholtzModel,v,T,x::Union{MassFraction,MassFraction,MassNumber}) = $op(model,v,T,mol_fraction(x))
 end
 
