@@ -337,9 +337,6 @@ function GERG2008(xsel = collect(1:21))
     Aij_indices_mat= Aij_indices_mat[xsel,xsel]
     Aij_indices2 = findall(!iszero, Aij_indices_mat)
     Aij_indices = [tuple(Aij_indices2[i][1],Aij_indices2[i][2],Aij_indices_mat[Aij_indices2[i]]) for i = 1:length(Aij_indices2)]
-  
-
-    
 
     fij=[1.0,1.0,1.0,1.0,1.0,0.771035405688,1.0,1.0,1.0,0.130424765150,0.281570073085,0.260632376098,
     0.312572600489e-1,-0.551609771024e-1,-0.551240293009e-1]
