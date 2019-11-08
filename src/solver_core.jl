@@ -16,6 +16,10 @@ println(typeof(text))
         end |> esc
     end
 end
+#volume solver 
+#with P and T, finds a volume that satisfies pressure(v,T) = P
+#without falling on the false loop.
+#overload this for cubics and consistent EOS
 function volume_solver(model::AbstractHelmholtzModel,P,T,x,v0 = nothing;verbose = false)  
     p(z) = core_pressure(model,z,T,x)
     fp(z) = p(z)-P
@@ -86,12 +90,17 @@ function pt_flash(method::AbstractHelmholtzSolver,
     return core_pt_flash(method,model,P0,T0,x0,options)
 end
 
-function vsol(model::AbstractHelmholtzModel,P,T,x,v0 = nothing;verbose = false)  
-    p(z) = core_pressure(model,z,T,x)
-    fp(z) = p(z)-P
+#spinodal solver
+#solves the equation dp/dv = 0 and gives the outer values as a tuple
+function spinodal_solver(model::AbstractHelmholtzModel,T,x)
+    fp(z) = core_pressure(model,z,T,x)
+    dfp(z) = ForwardDiff.derivative(fp,z)
     min_v = dot(covolumes(model),x)
-    max_v = 40*T0/P0 #approx 5 times ideal gas
-    
+    max_v = 40*T0/100.0 # 0.01 atm
 
-    return (fp,min_v,max_v)
+    #this is to be sure that (min_v,max_v) is a bracketing interval
+    @show min_v
+    @show max_v
+    dv = find_zeros(fp,min_v,max_v,n_pts=21)
+    dv
 end

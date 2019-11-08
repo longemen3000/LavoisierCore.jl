@@ -25,6 +25,7 @@ struct GERG2008 <: AbstractHelmholtzModel
     acentric_factor::Vector{Float64}
     molecularWeight::Vector{Float64}
     criticalDensity::Vector{Float64}
+    criticalVolume::Vector{Float64}
     criticalTemperature::Vector{Float64}
     criticalPressure::Vector{Float64}
     ideal_iters::Vector{Vector{Int64}}
@@ -483,7 +484,7 @@ function GERG2008(xsel = collect(1:21))
         k_exp_ijk[i] = length(etaijk[i])
         k_pol_ijk[i] = length(dijk[i]) - k_exp_ijk[i]
     end
-    return GERG2008(N,acentric_factor[xsel],molecularWeight[xsel],criticalDensity[xsel],criticalTemperature[xsel],criticalPressure[xsel],
+    return GERG2008(N,acentric_factor[xsel],molecularWeight[xsel],criticalDensity[xsel],1 ./ criticalDensity[xsel],criticalTemperature[xsel],criticalPressure[xsel],
     ideal_iters,nr[:,xsel],zeta[:,xsel],n0ik[xsel],t0ik[xsel],d0ik[xsel],c0ik[xsel],
     k_pol_ik[xsel],k_exp_ik[xsel],gamma_v[xsel,xsel],gamma_T[xsel,xsel],beta_v[xsel,xsel],beta_T[xsel,xsel],
     Aij_indices,fij,dijk,tijk,nijk,etaijk,epsijk,betaijk,gammaijk, k_pol_ijk,k_exp_ijk)
@@ -584,7 +585,7 @@ _gerg_asymetric_mix_rule(xi,xj,b)= b*(xi+xj)/(xi*b^2+xj)
 
 function _delta(model::GERG2008,rho,T,x)
     rhor = inv(mixing_rule_asymetric(cubic_mean_rule,_gerg_asymetric_mix_rule,
-    x,  mappedarray(inv,model.criticalDensity) ,model.gamma_v,model.beta_v))
+    x, model.criticalVolume ,model.gamma_v,model.beta_v))
     return rho/rhor
 end
 
