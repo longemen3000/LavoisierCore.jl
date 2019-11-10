@@ -6,7 +6,6 @@ abstract type AbstractPhase end #for solvers
 const R_GAS = ustrip(Unitful.R)
 Base.broadcastable(x::AbstractHelmholtzModel) = Ref(x)
 
-molecular_weight(x) = x
 
 
 
@@ -28,11 +27,10 @@ end
 #is equivalent to df/dni with with T,v, nj constant
 
 function partial_molar_property(core_fn,model,v,T,x)
-    function partial_fun(z)
-        sum_n = sum(z)
-        sum_n< zero(sum_n) && return zero(sum_n) 
-        xx = z*inv(sum_n)
-        return sum_n*core_fn(model,v,T,xx) 
+    function partial_fun(n)
+        sum_n = sum(n)
+        xx = n  .* inv(sum_n)
+        return sum_n*core_fn(model,v/sum_n,T,xx) 
     end
     return ForwardDiff.gradient(partial_fun,x)
 end
@@ -566,9 +564,10 @@ Base.getindex(A::MolFraction, i::Int) =A.n_values[i]
 Base.getindex(A::MolFraction, I::Vararg{Int}) =A.n_values[I...]
 Base.getindex(A::MassFraction, i::Int) = A.n_values[i]*A.mw[i]*A.n_amount*inv(A.m_amount)*1e-3
 Base.getindex(A::MassFraction, I::Vararg{Int}) = A.n_values[I...]*A.mw[I...]*A.n_amount*inv(A.m_amount)*1e-3
-moles(x::AbstractMaterialVector) = x.n_amount
-mass(x::AbstractMaterialVector) = x.m_amount
-
+core_moles(x::AbstractMaterialVector) = x.n_amount
+core_mass(x::AbstractMaterialVector) = x.m_amount
+moles(x::AbstractMaterialVector) = x.n_amount*1.0u"mol"
+mass(x::AbstractMaterialVector) = x.m_amount*1.0u"kg"
 #constructors
 function mol_fraction(x::AbstractVector,mw::AbstractVector,n_amount_opt = nothing)
     T = promote_type(eltype(x),eltype(mw))
@@ -671,8 +670,9 @@ function helmholtz_phase(model,v,T,x::AbstractMaterialVector{_T}) where _T
     return HelmholtzPhase{TT}(v1,T1,mol_number(x))
 end
 
-ccore_moles(a::HelmholtzPhase)= moles(a.material)
-core_mass(a::HelmholtzPhase) = mass(a.material)
+core_moles(x) = sum(x) #if a normal vector comes to the solver, this can give you the moles
+core_moles(a::HelmholtzPhase)= core_moles(a.material)
+core_mass(a::HelmholtzPhase) = core_mass(a.material)
 core_mol_volume(a::HelmholtzPhase) = a.volume
 core_volume(a::HelmholtzPhase) = a.volume*core_moles(a)
 core_mol_density(a::HelmholtzPhase) =inv(a.volume)
@@ -708,9 +708,3 @@ for op = (:_helmholtzn,    :core_helmholtz, :core_gibbs,    :core_grad_vt,    :c
     @eval $op(model::AbstractHelmholtzModel,a::HelmholtzPhase) = $op(model,core_mol_volume(a),core_temperature(a),mol_fraction(a))
     @eval $op(model::AbstractHelmholtzModel,v,T,x::Union{MassFraction,MassFraction,MassNumber}) = $op(model,v,T,mol_fraction(x))
 end
-
-
-
-
-
-

@@ -35,7 +35,7 @@ function volume_solver(model::AbstractHelmholtzModel,P,T,x,v0 = nothing;verbose 
         min_v *=0.5
     end
     vv = find_zeros(fp,min_v,max_v)
-    @ifverbose length(vv)
+    
     if length(vv) == 1
         return vv[1]
     else length(vv) >= 1
@@ -57,6 +57,104 @@ else
     end
 end
 end
+function core_mol_volume(model::AbstractHelmholtzModel,P0,T0,x0)
+    v = volume_solver(model,P0,T0,x0)
+    return v
+end
+
+function core_mol_volume(model::AbstractHelmholtzModel,P0,v0,T0,x0)
+    v = volume_solver(model,P0,T0,x0,v0)
+    return v
+end
+function core_mol_density(model::AbstractHelmholtzModel,P0,T0,x0)
+    v = volume_solver(model,P0,T0,x0)
+    return inv(v)
+end
+
+function core_mol_density(model::AbstractHelmholtzModel,P0,v0,T0,x0)
+    return inv(v)
+end
+
+function core_mass_volume(model::AbstractHelmholtzModel,P0,T0,x0)
+    v = volume_solver(model,P0,T0,x0)
+    k = dot(molecular_weight(model),x0)*1e-03 #kg/mol
+    return v/k
+end
+
+function core_mass_volume(model::AbstractHelmholtzModel,P0,v0,T0,x0)
+    v = volume_solver(model,P0,T0,x0,v0)
+    k = dot(molecular_weight(model),x0)*1e-03 #kg/mol
+    return v/k
+end
+
+function core_mass_density(model::AbstractHelmholtzModel,P0,T0,x0)
+    v = volume_solver(model,P0,T0,x0)
+    k = dot(molecular_weight(model),x0)*1e-03 #kg/mol
+    return k/v
+end
+
+function core_mass_density(model::AbstractHelmholtzModel,P0,v0,T0,x0)
+    v = volume_solver(model,P0,T0,x0,v0)
+    k = dot(molecular_weight(model),x0)*1e-03
+    return k/v
+end
+
+
+function mol_volume(model::AbstractHelmholtzModel,P0,T0,x0)
+    P1 = _transform_P(P0)
+    T1 = _transform_T(T0)
+    return core_mol_volume(model,P1,T1,x0)*1.0u"m^3/mol"
+end
+
+function mol_volume(model::AbstractHelmholtzModel,P0,v0,T0,x0)
+    P1 = _transform_P(P0)
+    T1 = _transform_T(T0)
+    v1 = _transform_v(v0,molecular_weight(model),x0)
+    return core_mol_volume(model,P1,v1,T1,x0)*1.0u"m^3/mol"
+end
+
+function mol_density(model::AbstractHelmholtzModel,P0,T0,x0)
+    P1 = _transform_P(P0)
+    T1 = _transform_T(T0)
+    return core_mol_density(model,P1,T1,x0)*1.0u"mol/m^3"
+end
+
+function mol_density(model::AbstractHelmholtzModel,P0,v0,T0,x0)
+    P1 = _transform_P(P0)
+    T1 = _transform_T(T0)
+    v1 = _transform_v(v0,molecular_weight(model),x0)
+    return core_mol_density(model,P1,v1,T1,x0)*1.0u"mol/m^3"
+end
+
+function mass_volume(model::AbstractHelmholtzModel,P0,T0,x0)
+    P1 = _transform_P(P0)
+    T1 = _transform_T(T0)
+    return core_mass_volume(model,P1,T1,x0)*1.0u"m^3/kg"
+end
+
+function mass_volume(model::AbstractHelmholtzModel,P0,v0,T0,x0)
+    P1 = _transform_P(P0)
+    T1 = _transform_T(T0)
+    v1 = _transform_v(v0,molecular_weight(model),x0)
+    return core_mass_volume(model,P1,v1,T1,x0)*1.0u"m^3/kg"
+end
+
+function mass_density(model::AbstractHelmholtzModel,P0,T0,x0)
+    P1 = _transform_P(P0)
+    T1 = _transform_T(T0)
+    return core_mass_density(model,P1,T1,x0)*1.0u"kg/m^3"
+end
+
+function mass_density(model::AbstractHelmholtzModel,P0,v0,T0,x0)
+    P1 = _transform_P(P0)
+    T1 = _transform_T(T0)
+    v1 = _transform_v(v0,molecular_weight(model),x0)
+    return core_mass_density(model,P1,v1,T1,x0)*1.0u"kg/m^3"
+end
+
+
+
+
 
 function pt_flash(method::T,
     model::T2,
@@ -67,11 +165,12 @@ function pt_flash(method::T,
     throw(error("this method is not implemented."))
 end
 
-function pt_flash(method::T,
+function pt_flash(
     model::T2,
     P0::Unitful.Pressure,
     T0::Unitful.Temperature,
     x0,
+    method::T,
     options=nothing) where T <: AbstractHelmholtzSolver where T2 <: AbstractHelmholtzModel
     return core_pt_flash(method,
     model,
@@ -81,13 +180,13 @@ function pt_flash(method::T,
     options)
 end
 
-function pt_flash(method::AbstractHelmholtzSolver,
-    model::AbstractHelmholtzModel,
-    phase0::HelmholtzPhase,options)
+function pt_flash(model::AbstractHelmholtzModel,
+    phase0::HelmholtzPhase,
+    method::AbstractHelmholtzSolver,options)
     P0 = core_pressure(model,phase0)
     T0 = temperature(phase0)
     x0 = mol_fraction(model,phase0)
-    return core_pt_flash(method,model,P0,T0,x0,options)
+    return core_pt_flash(model,P0,T0,x0,method,options)
 end
 
 #spinodal solver
@@ -103,4 +202,15 @@ function spinodal_solver(model::AbstractHelmholtzModel,T,x)
     @show max_v
     dv = find_zeros(fp,min_v,max_v,n_pts=21)
     dv
+end
+
+
+#function predict_saturation_pressure(model::AbstractHelmholtzModel,T0,x0,method)
+function molar_volume_rackett(model::AbstractHelmholtzModel,T,x0)
+    Pc = critical_pressure(model)
+    Tc = critical_temperature(model)
+    vc = critical_volume(model)
+    Zc = core_compressibility_factor.(model,Pc,vc,Tc,Ref(1.0))
+   # return vc
+    return R_GAS .* Tc ./ Pc .* Zc .^ (1.0 .+ (1.0 .- T./ Tc).^(2/7) )
 end
