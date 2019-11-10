@@ -41,6 +41,10 @@ at this moment, this package has implementations of
 * entropy
 * isochoric heat capacity
 * isobaric heat capacity
+* molar volume (from pressure and temperature)
+* mass volume (from pressure and temperature)
+* molar density (from pressure and temperature)
+* mass density (from pressure and temperature)
 
 if you defined your helmholtz equation, then you have access to all those functions.
 
