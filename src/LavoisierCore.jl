@@ -13,6 +13,7 @@ using PositiveFactorizations
 
 include("utils.jl")
 include("core.jl")
+include("solver_core.jl")
 include("IAPWS95.jl")
 include("gerg2008.jl")
 include("solver4.jl")
@@ -29,7 +30,9 @@ export _helmholtzn,    core_helmholtz, core_gibbs,    core_grad_vt,    core_grad
     isobaric_heat_capacity,    sound_speed
 export HelmholtzPhase, helmholtz_phase, volume, moles, mass, temperature
 export mol_fraction, mol_number, mass_fraction, mass_number
-export pt_flash
+export pt_flash, mass_density, mol_density, mass_volume, mol_volume
+export core_mass_density, core_mol_density, core_mass_volume, core_mol_volume
+
 export Gernert
 end
 
