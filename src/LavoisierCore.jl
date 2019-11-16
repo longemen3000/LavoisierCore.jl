@@ -16,7 +16,7 @@ include("core.jl")
 include("solver_core.jl")
 include("IAPWS95.jl")
 include("gerg2008.jl")
-include("solver4.jl")
+include("solver5.jl")
 
 
 export IAPWS95,GERG2008
