@@ -10,15 +10,15 @@ end
 
 #transformation of arbitrary molar units to the SI units
 @inline function _transform_v(v,mw,x)
-    return 1.0*v
+    return float(v)
 end
 
 @inline function _transform_v(v::Unitful.Quantity{<:Real, Unitful.𝐋^3*Unitful.𝐍^-1},mw,x)
-    return Unitful.ustrip(u"m^3/mol"(v))
+    return float(Unitful.ustrip(u"m^3/mol"(v)))
 end
 
 @inline function _transform_v(v::Unitful.Quantity{<:Real, Unitful.𝐋^-3*Unitful.𝐍^1},mw,x)
-    return 1/Unitful.ustrip(u"mol/m^3"(v))
+    return float(inv(Unitful.ustrip(u"mol/m^3"(v))))
 end
 
 @inline function _transform_v(v::Unitful.Quantity{<:Real, Unitful.𝐋^-3*Unitful.𝐌^1},mw,x)
@@ -31,11 +31,11 @@ end
 end
 
 @inline function _transform_T(T)
-    return 1.0*T
+    return float(T)
 end
 
 @inline function _transform_T(T::TT) where TT <: Unitful.Temperature
-        return Unitful.ustrip(u"K"(T))
+        return float(Unitful.ustrip(u"K"(T)))
 end
 
 function _transformVT(V,T,mw,x)
@@ -121,3 +121,4 @@ function solve_cubic_eq(coeff1::T,coeff2::T,coeff3::T,coeff4::T) where T<:Real
     zeta2 = conj(zeta1)
     return third*(s0 + s1 + s2), third*(s0 + s1*zeta2 + s2*zeta1), third*(s0 + s1*zeta1 + s2*zeta2)
 end
+

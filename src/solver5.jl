@@ -1,10 +1,11 @@
 struct Gernert <: AbstractHelmholtzSolver end
 
-function core_pt_flash(method::Gernert,
+function core_pt_flash(
     model::M,
     P0::Real,
     T0::Real,
     x0,
+    method::Gernert,
     options=nothing) where M <: AbstractHelmholtzModel
     return gernert_pt(model,P0,T0,x0)
 end
@@ -57,7 +58,7 @@ function _K0(model,P0,T0,type::Val{:wilson})
     return exp.( log.(critical_pressure(model) ./ P0)  .+ 5.373 .* (1.0 .+ acentric_factor(model)) .* (1.0 .- critical_temperature(model) ./ T0))
 end
 
-function gernert_pt(model::AbstractHelmholtzModel,P0::Real,T0::Real,x0)
+function gernert_pt(model::_M,P0::_T,T0::_T2,x0) where _T<:Real where _T2 <:Real where _M<:AbstractHelmholtzModel
     
     min_v = dot(x0,covolumes(model))
     max_v = 40*T0/P0
@@ -195,41 +196,47 @@ function gernert_pt(model::AbstractHelmholtzModel,P0::Real,T0::Real,x0)
             #println(tpd_h)
             #println(tpd_l)
             if tpd_h < tpd_hmin
+                @show tpd_hmin
                 tpd_hmin = tpd_h
                 xt_hmin .= xt_h
                 vt_hmin = fetch(vt_h)
             end
 
             if tpd_l < tpd_lmin
+                @show tpd_lmin
                 tpd_lmin = tpd_l
                 xt_lmin .= xt_l
                 vt_lmin = fetch(vt_l)
             end 
             if (tpd_lmin < 0) && (stable_phase == true)
+                @show tpd_lmin
                 stable_phase = false
-                iters +=3
+                #break
+                iters +=5
             end
             if (tpd_hmin < 0) && (stable_phase == true)
+                @show tpd_hmin
                 stable_phase = false
-                iters +=3
+                #break
+                iters +=5
             end 
 
-            if xt_h ≈ x0 
-                stable_phase = true
-                break
-            end
-            if xt_l ≈ x0 
-                stable_phase = true
-                break
-            end
+            #if xt_h ≈ x0 
+            #    stable_phase = true
+            #    break
+            #end
+            #if xt_l ≈ x0 
+            #    stable_phase = true
+            #    break
+            #end
             
             xt_h .= x0.* exp.(lnϕ0) ./ exp.(lnϕt_h)
             xt_l .= x0.* exp.(lnϕ0) ./ exp.(lnϕt_l)
            
             normalizefrac!(xt_h)
             normalizefrac!(xt_l)
-            @show xt_h
-            @show xt_l
+            #@show xt_h
+            #@show xt_l
             @show xt_lmin
             @show xt_hmin
         end
@@ -262,7 +269,6 @@ function _f0_isothermal6!(model,P0,T0,x0,x010,x020,v010,v020,v000)
     function f_0(z,v1,v2)
         x1 = vcat(z[1:end-1],1-sum(z[1:end-1]))
         β = z[end]
-        @show x1
         return  β*core_gibbs(model,P0,v1,T0,x1) + (1-β)*core_gibbs(model,P0,v2,T0,(x0 .- β .* x1)/(1-β))
     end
     function fj!(F, J, z)
@@ -315,29 +321,58 @@ fj!(F0,J0,z0)
 ε3 = (τ)^(1/3)
 ix = 0
 isconverged = false
+
 for i = 1:100
+    println("iteration $i")
     fj!(F0,J0,z0)
     dz .= J0\-F0
     cholesky!(Positive, J0)
+    
+    #bounding α
     α =1.0
-    minz,maxz = extrema(z0 .+ α .* dz)
+    cachedz .=z0 .+ α .* dz
+    minz,maxz = extrema(cachedz)
     while ! (0 <=minz < maxz <=1.0)
         α *=0.6321205588285577
-        minz,maxz = extrema(z0 .+ α .* dz)
-    end     
-    @show z0
-    @show vv
+        cachedz .=z0 .+ α .* dz
+        minz,maxz = extrema(cachedz)
+    end 
+    #in certain situations, x02 becomes negative after bounding x01
+    cachedz[1:end-1] .= (x0[1:end-1] .- (z0[end] .+ α .*dz[end]) .*z0[1:end-1] .+ α .*dz[1:end-1]) ./ (1 .- (z0[end] .+ α .*dz[end]))
+    minz,maxz = extrema(cachedz)
+    while ! (0 <=minz < maxz <=1.0)
+        α *=0.6321205588285577
+        cachedz[1:end-1] .= (x0[1:end-1] .- (z0[end] .+ α .*dz[end]) .*z0[1:end-1] .+ α .*dz[1:end-1]) ./ (1 .- (z0[end] .+ α .*dz[end]))
+        minz,maxz = extrema(cachedz)
+    end 
+
     f_j(z) = f_0(z,vv[1],vv[2])
-    fj = f_j(z0)
-    Θ = τ*(1+abs(fj)) 
+    fj0 = f_j(z0)
+    cachedz .= z0 .+ (0.6321205588285577*α) .*dz
+    fj_mid = f_j(cachedz)
+    cachedz .= z0 .+ α .*dz
+    fj_full = f_j(cachedz)
+     
+    let r1 = fj0, r2 = fj_mid, r3 =  fj_full, x1 = 0, x2 = 0.6321205588285577*α, x3 = α
+        x11 = x1*x1
+        x22 = x2*x2
+        x33 = x3*x3
+        cc = ((x2-x3)*(r1-r3) - (x1-x3)*(r2-r3))/((x2-x3)*(x1-x3)*(x1-x2))
+        xmin = -0.5((x11-x33)*(r2-r3)-(x22-x33)*(r1-r3))/((x2-x3)*(r1-r3) - (x1-x3)*(r2-r3))
+        if (cc < 0) && (0 < xmin < α)
+            α = xmin
+        end
+    end
+
+    
+    Θ = τ*(1+abs(fj0)) 
     #@show Θ
     #@show  f_j(z0 .+ α .*dz)- fj
-    #@show  fj
     #@show  f_j(z0 .+ α .*dz)
     #@show norm(dz)
     #@show sqrt(τ)*(1+norm(z0))
     
-    if abs(f_j(z0 .+ α .*dz)- fj) < Θ
+    if abs(fj_full- fj0) < Θ
         isconverged =true
         break
     elseif norm(dz) < sqrt(τ)*(1+norm(z0))

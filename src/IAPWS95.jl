@@ -95,7 +95,7 @@ end
 end
 
 function _fr(model::IAPWS95,rho,T)
-    delta = rho/322
+    delta = rho/322.0
     tau = 647.096/T
    
     res=zero(promote_type(typeof(rho),typeof(T)))
@@ -163,3 +163,4 @@ critical_pressure(model::IAPWS95)  = [2.2064e7]
 critical_volume(model::IAPWS95)  = [inv(17873.72799560906)]
 critical_temperature(model::IAPWS95)  = [647.096]  
 critical_density(model::IAPWS95) = [17873.72799560906]
+acentric_factor(model::IAPWS95) = [0.344861]
