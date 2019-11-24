@@ -101,7 +101,7 @@ I need a lot of corrections on the PT solver, im working on it!. meanwhile, ther
 ```julia
 water = IAPWS95
 phases = core_pure_t_flash(water,275.0,[1.0]) #2°C, near the triple point, in IAPWS results
-julia> core_pressure.(agua,phases)
+julia> core_pressure.(water,phases)
 2-element Array{Float64,1}:
  698.4511870563939 #Pa
  698.451166699837 #Pa
