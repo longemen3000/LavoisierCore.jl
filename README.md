@@ -82,7 +82,7 @@ Added a equilibrium solver in Volume-Temperature-mol, based on a unified represe
 of helmholtz equilibria (). needs testing with consistent EOS
 
 ##November 3, 2019
-Added a PT two phase solver based on the TREND solver (Gernert el. al, 2014). added an interfase to call a solver:
+Added a PT two phase solver based on the TREND solver (EXPERIMENTAL) (Gernert el. al, 2014). added an interfase to call a solver:
 
 ```julia
 water_and_gases = GERG2008(:H2O,:N2,:O2)
@@ -91,11 +91,28 @@ P0 = 1.1u"atm" #it accepts a number (Pa), but in this case, unitful quantities a
 T = 25u"°C"
 method = Gernert()
 x0 = [0.6,0.2,0.2]
-phases = pt_flash(method,water_and_gases,P0,T0,x0)
+phases = pt_flash(water_and_gases,P0,T0,x0,method)
 entropy.(model,phases) #vector of entropies with units
 core_entropy.(model,phases) #vector of entropies without units (SI)
 ```
-Any suggestions are appreciated!
+
+##November 24, 2019
+I need a lot of corrections on the PT solver, im working on it!. meanwhile, there are two new functions: `core_pure_p_flash` and `core_pure_t_flash`, that calculates saturation's temperature and pressure of one component: for example:
+```julia
+water = IAPWS95
+phases = core_pure_t_flash(water,275.0,[1.0]) #2°C, near the triple point, in IAPWS results
+julia> core_pressure.(agua,phases)
+2-element Array{Float64,1}:
+ 698.4511870563939 #Pa
+ 698.451166699837 #Pa
+phases2 = core_pure_p_flash(water,698.451166699837,[1.0])
+julia> core_temperature.(phases2)
+2-element Array{Float64,1}:
+ 274.99999999999994
+ 274.99999999999994
+```
+a future idea is to group all those flash function under one method: `flash`, and dispatch appropriately.
+Any suggestions are appreciated and encouraged! (in other words,please leave suggestions)
 
 
 
